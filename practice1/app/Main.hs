@@ -1,5 +1,6 @@
-module Lib where
+--module Lib where
 
+module Main where
 -------------------------
 -- Practice 1
 -------------------------
@@ -26,7 +27,7 @@ module Lib where
 --
 -------------------------------
 
-
+main :: IO ()
 main = interact solve
 
 readInt :: String -> Int
@@ -36,7 +37,16 @@ showInt :: Int -> String
 showInt = show
 
 solve :: String -> String
-solve s = "Hello " ++ s ++ "!"
+solve s = case map readInt $ words s of
+            []            -> "Error"
+            (mode : list) -> concat $ map ((flip (++) " ") . showInt) $ sortWithMode mode list
+
+sortWithMode :: Int -> [Int] -> [Int]
+sortWithMode mode = case mode of
+                      0 -> mergeSort
+                      1 -> insertSort
+                      2 -> quickSort
+                      _ -> (\x -> x)
 
 -- MERGESORT
 split :: [a] -> ([a], [a])
