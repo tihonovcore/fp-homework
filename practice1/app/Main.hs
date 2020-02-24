@@ -72,15 +72,17 @@ mergeSort a = a
 -- INSERTSORT
 insertSort :: Ord a => [a] -> [a]
 insertSort [] = []
-insertSort a  = let mn = findMin a in case mn of
-                                        Nothing -> []
-                                        Just x  -> x : (insertSort $ removeMin a)
+insertSort a  = case findMin a of
+                  Nothing -> []
+                  Just x  -> x : (insertSort $ removeMin a)
 
 findMin :: Ord a => [a] -> Maybe a
-findMin [] = Nothing
-findMin (x : xs) = let rec = findMin xs in case rec of
-                                             Nothing -> Just x
-                                             Just a  -> if x < a then Just x else Just a
+findMin []       = Nothing
+findMin (x : xs) = chooseMinimum x (findMin xs)
+
+chooseMinimum :: Ord a => a -> Maybe a -> Maybe a
+chooseMinimum x Nothing  = Just x
+chooseMinimum x (Just a) = Just (if x < a then x else a)
 
 removeMin :: Ord a => [a] -> [a]
 removeMin a = case findMin a of
