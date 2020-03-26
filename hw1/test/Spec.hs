@@ -5,8 +5,6 @@ import Block4
 import Block5
 
 import Test.Hspec
-import Test.QuickCheck
-import Control.Exception (evaluate)
 
 main :: IO ()
 main = hspec $ do
@@ -104,30 +102,30 @@ main = hspec $ do
       isEmpty Leaf `shouldBe` True
 
     it "Non empty tree" $ do
-      isEmpty (Node Leaf (Node Leaf Leaf (Values 3 [])) (Values 5 [])) `shouldBe` False
+      isEmpty (Node Leaf (Node Leaf Leaf (Values (3 :: Integer) [])) (Values 5 [])) `shouldBe` False
 
   describe "Block1.size" $ do
     it "Empty tree" $ do
       size Leaf `shouldBe` 0
 
     it "Non empty tree" $ do
-      size (Node Leaf (Node Leaf Leaf (Values 3 [])) (Values 5 [])) `shouldBe` 2
+      size (Node Leaf (Node Leaf Leaf (Values (3 :: Integer) [])) (Values 5 [])) `shouldBe` 2
 
     it "Non empty tree with value repetition" $ do
-      size (Node Leaf (Node Leaf Leaf (Values 3 [3, 3, 3])) (Values 5 [])) `shouldBe` 5
+      size (Node Leaf (Node Leaf Leaf (Values (3 :: Integer) [3, 3, 3])) (Values 5 [])) `shouldBe` 5
 
   describe "Block1.find" $ do
     it "Empty tree" $ do
-      find 2 Leaf `shouldBe` False
+      find (2 :: Integer) Leaf `shouldBe` False
 
     it "Non empty tree" $ do
-      find 7 (Node (Node Leaf Leaf (Values 3 [])) Leaf (Values 5 [])) `shouldBe` False
+      find (7 :: Integer) (Node (Node Leaf Leaf (Values 3 [])) Leaf (Values 5 [])) `shouldBe` False
 
     it "Non empty tree" $ do
-      find 3 (Node (Node Leaf Leaf (Values 3 [])) Leaf (Values 5 [])) `shouldBe` True
+      find (3 :: Integer) (Node (Node Leaf Leaf (Values 3 [])) Leaf (Values 5 [])) `shouldBe` True
 
     it "Non empty tree with value repetition" $ do
-      find 3 (Node (Node Leaf Leaf (Values 3 [3, 3, 3])) Leaf (Values 5 [])) `shouldBe` True
+      find (3 :: Integer) (Node (Node Leaf Leaf (Values 3 [3, 3, 3])) Leaf (Values 5 [])) `shouldBe` True
 
   describe "Block1.put" $ do
     it "Empty tree" $ do
@@ -153,29 +151,29 @@ main = hspec $ do
       fromList ([] :: [Int]) `shouldBe` Leaf
 
     it "Non empty tree" $ do
-      fromList [4, 5, 2, 5] `shouldBe` (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [5])) (Values 4 []))
+      fromList [(4 :: Integer), 5, 2, 5] `shouldBe` (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [5])) (Values 4 []))
 
     it "Tree LRL" $ do
-      fromList [6, 9, 7, 8] `shouldBe` (Node Leaf (Node (Node Leaf (Node Leaf Leaf (Values 8 [])) (Values 7 [])) Leaf (Values 9 [])) (Values 6 []))
+      fromList [(6 :: Integer), 9, 7, 8] `shouldBe` (Node Leaf (Node (Node Leaf (Node Leaf Leaf (Values 8 [])) (Values 7 [])) Leaf (Values 9 [])) (Values 6 []))
 
   describe "Block1.remove" $ do
     it "Remove from empty tree" $ do
-      remove 401 Leaf `shouldBe` Leaf
+      remove (401 :: Integer) Leaf `shouldBe` Leaf
 
     it "Remove with repetition" $ do
-      remove 5 (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [5])) (Values 4 [])) `shouldBe` (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [])) (Values 4 []))
+      remove (5 :: Integer) (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [5])) (Values 4 [])) `shouldBe` (Node (Node Leaf Leaf (Values 2 [])) (Node Leaf Leaf (Values 5 [])) (Values 4 []))
 
     it "Remove single" $ do
-      let from = (Node Leaf (Node (Node Leaf (Node Leaf Leaf (Values 8 [])) (Values 7 [])) Leaf (Values 9 [])) (Values 6 []))
-          to   = (Node Leaf (Node (Node Leaf Leaf                           (Values 7 [])) Leaf (Values 9 [])) (Values 6 [])) 
-      remove 8 from `shouldBe` to
+      let from = (Node Leaf (Node (Node Leaf (Node Leaf Leaf (Values (8 :: Integer) [])) (Values (7 :: Integer) [])) Leaf (Values (9 :: Integer) [])) (Values (6 :: Integer) []))
+          to   = (Node Leaf (Node (Node Leaf Leaf                           (Values (7 :: Integer) [])) Leaf (Values (9 :: Integer) [])) (Values (6 :: Integer) []))
+      remove (8 :: Integer) from `shouldBe` to
 
   describe "Block2.splitOn" $ do
     it "Split nothing" $ do
       splitOn '/' "" `shouldBe` [""]
 
     it "Split numbers" $ do
-      splitOn 3 [2, 3, 2, 3, 8] `shouldBe` [[2], [2], [8]]
+      splitOn (3 :: Integer) [2, 3, 2, 3, 8] `shouldBe` [[2], [2], [8]]
 
     it "Slash" $ do
       splitOn '/' "path/to/file" `shouldBe` ["path", "to", "file"]
@@ -185,24 +183,24 @@ main = hspec $ do
 
   describe "Block2.FTree" $ do
     it "Sum" $ do
-      foldl (\acc e -> e + acc) 0 (FNode (FLeaf 1) (FNode (FLeaf 21) (FLeaf 4) 0) 0) `shouldBe` 26
+      foldl (\acc e -> e + (acc :: Integer)) 0 (FNode (FLeaf 1) (FNode (FLeaf 21) (FLeaf 4) 0) 0) `shouldBe` 26
 
     it "Concat" $ do
-      foldl (\acc e -> acc ++ (show e)) "" (FNode (FLeaf 1) (FNode (FLeaf 21) (FLeaf 4) 0) 0) `shouldBe` "102104"
+      foldl (\acc e -> acc ++ (show (e :: Integer))) "" (FNode (FLeaf 1) (FNode (FLeaf 21) (FLeaf 4) 0) 0) `shouldBe` "102104"
 
   describe "Block3.maybeConcat" $ do
     it "[Integer]" $ do
-      maybeConcat [Just [1,2,3], Nothing, Just [4,5]] `shouldBe` [1,2,3,4,5]
+      maybeConcat [Just [(1 :: Integer),2,3], Nothing, Just [4,5]] `shouldBe` [1,2,3,4,5]
 
     it "Chars" $ do
       maybeConcat [Just ['H', 'e'], Nothing, Just ['l'], Just ['p']] `shouldBe` "Help"
 
   describe "Block3.NonEmpty" $ do
     it "Single" $ do
-      (3 :| []) <> (4 :| [5, 6]) `shouldBe` (3 :| [4, 5, 6])
+      ((3 :: Integer) :| []) <> (4 :| [5, 6]) `shouldBe` (3 :| [4, 5, 6])
 
     it "Three lists" $ do
-      (1 :| [1, 1]) <> (2 :| [2, 2]) <> (3 :| [3, 3]) `shouldBe` (1 :| [1, 1, 2, 2, 2, 3, 3, 3])
+      ((1 :: Integer) :| [1, 1]) <> (2 :| [2, 2]) <> (3 :| [3, 3]) `shouldBe` (1 :| [1, 1, 2, 2, 2, 3, 3, 3])
 
   describe "Block3.Name" $ do
     it "Single" $ do
@@ -225,6 +223,5 @@ main = hspec $ do
         eval (Multiply t (Plus (Subtract f t) $ Divide f t)) `shouldBe` (Right 10)
 
     it "Expression with error" $ do
-          let t = Const 2
-              f = Const 5 in
+          let t = Const 2 in
             eval (Divide t (Subtract (Plus t t) $ Pow t t)) `shouldBe` (Left DivisionByZero)

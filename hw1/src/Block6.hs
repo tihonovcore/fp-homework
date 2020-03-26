@@ -1,5 +1,5 @@
 module Block6
-  ( CBC
+  ( CBS
   , Parser
   , eof
   , ok

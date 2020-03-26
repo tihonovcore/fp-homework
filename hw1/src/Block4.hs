@@ -8,32 +8,14 @@ import Data.Char
 -- Task 1 -------------------
 -----------------------------
 
--- TODO Traversabnel
--- |Parse numbers from string
-numbers :: String -> [Maybe Int]
-numbers s = fmap f (words s)
+stringSum :: String -> Maybe Int
+stringSum s = fmap sum $ traverse (parseInt (Just 0)) (words s)
   where
-    f :: String -> Maybe Int
-    f = parseInt (Just 0)
-
     parseInt :: Maybe Int -> String -> Maybe Int
     parseInt Nothing _ = Nothing
     parseInt x [] = x
     parseInt (Just pref) (x : xs) | isDigit x = parseInt (Just $ pref * 10 + digitToInt x) xs
                                   | otherwise = Nothing
-
--- |If string contains numbers, parse it and find amount,
--- otherwise returns Nothing 
-stringSum :: String -> Maybe Int
-stringSum s = f (numbers s)
-  where
-    f :: [Maybe Int] -> Maybe Int
-    f [] = Just 0
-    f (Nothing  : _ ) = Nothing
-    f ((Just x) : xs) = case f xs of
-                          Just result -> Just (x + result)
-                          Nothing     -> Nothing
-
 
 -----------------------------
 -- Task 2 -------------------
