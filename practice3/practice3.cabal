@@ -1,0 +1,32 @@
+name:                practice3
+version:             0.1.0.0
+synopsis:            Synopsis for practice 3
+description:         Practice 3 for FP ITMO course
+
+homepage:            https://github.com/tihonovcore/fp-homework/tree/master/practice3#readme
+license:             MIT
+license-file:        LICENSE
+author:              Tihonov Vitaly
+maintainer:          tihonovcore@gmail.com
+copyright:           2020 Tihonov Vitaly
+
+category:            Web
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+tested-with:         GHC == 8.0.1
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Task1, Task2
+  ghc-options:         -Wall
+  build-depends:       base >= 4.9 && < 5
+  default-language:    Haskell2010
+
+executable practice1
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , practice1
+  default-language:    Haskell2010
