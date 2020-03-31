@@ -41,8 +41,3 @@ instance Functor Tree where
 
 -- #####################################
 -- Task 9 ##############################
-
-data Tree a
-  = Leaf a
-  | Branch (Tree a) (Tree a)
-
