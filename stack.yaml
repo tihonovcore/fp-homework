@@ -31,6 +31,7 @@ resolver: lts-14.25
 packages:
 - hw0
 - hw1
+- hw1-second-chance
 - hw2
 - hw3
 - hw4
