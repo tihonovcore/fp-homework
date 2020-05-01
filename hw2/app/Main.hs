@@ -1,23 +1,21 @@
 module Main where
 
-import Control.Monad.State.Lazy
---import Debug.Trace --TODO: rm
 import Lib
-import System.Directory
---import Control.Exception (SomeException, catch)
+import DirectoryState
+import System.IO (hSetBuffering, stdout, BufferMode(..))
 
 path :: String
 path = "/home/tihonovcore/testHaskellCL"
 
--- /home/tihonovcore/testHaskellCL
 main :: IO ()
 main = do
   startDir <- getLine       -- read dir. TODO: read as arg
-  content <- readDirState startDir
+  content <- readDirectoryState startDir
   loop content
 
-loop :: Directory -> IO ()
+loop :: DirectoryState -> IO ()
 loop content = do
+  hSetBuffering stdout NoBuffering
   putStr "> "
   command <- getCommand
   let (result, newContent) = evalCommand command content
@@ -41,51 +39,21 @@ getCommand = do
                  | s == "exit"   -> return Exit
                  | otherwise     -> return Error
 
-evalCommand :: Command -> Directory -> (String, Directory)
-evalCommand c d = match c
+-- TODO: work with vcs
+evalCommand :: Command -> DirectoryState -> (String, DirectoryState)
+evalCommand c oldState@(DS vcs d) = match c
   where
-    match :: Command -> (String, Directory)
-    match Dir   = (dir d, d)
-    match (MkDir  dirName) = handle d "Directory already exists" $ mkdir d dirName
-    match (Cd     dirName) = handle d "Directory not found"      $ cd    d dirName
-    match (Touch fileName) = handle d "File already exists"      $ touch d fileName
+    match :: Command -> (String, DirectoryState)
+    match Dir              = (dir d, oldState)
+    match (MkDir  dirName) = handle "Directory already exists" $ mkdir d dirName
+    match (Cd     dirName) = handle "Directory not found"      $ cd    d dirName
+    match (Touch fileName) = handle "File already exists"      $ touch d fileName
     match Exit  = undefined
-    match _     = handle d "Unexpected input" Nothing
+    match _     = handle "Unexpected input" Nothing
 
-    handle :: Directory -> String -> Maybe Directory -> (String, Directory)
-    handle _        _       (Just dd) = ("", dd)
-    handle oldState message Nothing  = (message, oldState)
-    
+    handle :: String -> Maybe Directory -> (String, DirectoryState)
+    handle _       (Just dd) = ("", DS vcs dd)
+    handle message Nothing   = (message, oldState)
+
 showResult :: String -> IO ()
 showResult = putStrLn
-
--- TODO: think about errors
--- TODO: rm stateT IO
-readDirState :: String -> IO Directory
-readDirState dirName = do
-  content <- (toAbsolute . skipDot . getDirectoryContents) dirName
-  (dirWithFiles, _) <- runStateT (readFiles $ Directory dirName [] []) content
-  (dirWithFilesAndDirs, _) <- runStateT (readDirs dirWithFiles) content
-  return dirWithFilesAndDirs
-  where
-    readFiles :: Directory -> StateT [FilePath] IO Directory
-    readFiles (Directory name dirs _) =
-      StateT $ \pathList ->
-        let filePaths = filterM doesFileExist pathList
-            files = (traverse mkFile =<< filePaths)
-            newDir = fmap (Directory name dirs) files
-         in fmap (\d -> (d, pathList)) newDir
-
-    readDirs :: Directory -> StateT [FilePath] IO Directory
-    readDirs (Directory name _ files) =
-      StateT $ \pathList ->
-        let dirPaths = filterM doesDirectoryExist pathList
-            dirs = (traverse readDirState =<< dirPaths)
-            newDir = fmap (\dirsList -> Directory name dirsList files) dirs
-         in fmap (\d -> (d, pathList)) newDir
-
-    skipDot :: IO [FilePath] -> IO [FilePath]
-    skipDot = fmap $ filter (\s -> show s /= "\".\"" && show s /= "\"..\"")
-
-    toAbsolute :: IO [FilePath] -> IO [FilePath]
-    toAbsolute = fmap $ map (\fp -> dirName ++ "/" ++ fp)

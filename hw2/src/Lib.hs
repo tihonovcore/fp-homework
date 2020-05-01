@@ -10,86 +10,65 @@ module Lib
   ) where
 
 import Control.Monad.State.Lazy
-import System.FilePath.Posix
-import Debug.Trace
-import Control.Exception (throw)
-
--- |File <name> <content>
--- TODO: file info: size etc
-data File = File String String
-
-mtrace :: (Monad m, Show a) => m a -> m a
-mtrace m = m >>= (\con -> trace (show con) m)
-
-mkFile :: FilePath -> IO File
-mkFile path = File name <$> content --(content >>= \con -> trace con content)
-  where
-    name :: FilePath
-    name = takeFileName path --TODO: only name
-
-    content :: IO String
-    content = readFile path
-
-instance Show File where
-  show (File name con) = name ++ " " ++ con
-
---newtype Name = Name String
-
---TODO add `parent`
-data Directory = Directory String [Directory] [File]
-
-instance Show Directory where
-  show = render ""
-
--- TODO: check new line
-render :: String -> Directory -> String
-render indent (Directory name subDirs files) =
-  let newIndent = indent ++ "| " in
-  name ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
-    where
-      showWithIndentFile :: String -> [File] -> String
-      showWithIndentFile _      [] = ""
-      showWithIndentFile indent (x : xs) = indent ++ show x ++ ln xs ++ showWithIndentFile indent xs
-
-      showWithIndentDir :: String -> [Directory] -> String
-      showWithIndentDir _      [] = ""
-      showWithIndentDir indent (x : xs) = indent ++ render indent x ++ "\n" ++ showWithIndentDir indent xs
-
-      ln :: [a] -> String
-      ln [] = ""
-      ln _  = "\n"
+import DirectoryState
+--import Debug.Trace (trace)
 
 -- |Nothing if dir not found
+-- 
+-- u> cd v
+-- delete `v` from `u`'s directories
+-- rename `u` to `..`
+-- add `u` to `v`'s directories
+--
+-- v> cd ..
+-- delete `..` from `v`'s directories
+-- rename `..` to `u`
+-- add `v` to `u`'s directories
 cd :: Directory -> String -> Maybe Directory
-cd (Directory _ dirs _) nextDir = getDir nextDir dirs
+cd (Directory info dirs files) name = do
+  (v, other) <- rmDir name dirs
+  let u = Directory info other files
+  let uv = if name == ".."
+           then (u, invertName v)
+           else (invertName u, v)
+  Just $ uncurry addDir uv
   where
-    getDir :: String -> [Directory] -> Maybe Directory
-    getDir _ [] = Nothing
-    getDir expectedName (x@(Directory currName _ _) : xs) =
-      if expectedName == currName
-      then Just x
-      else getDir expectedName xs
+    rmDir :: String -> [Directory] -> Maybe (Directory, [Directory])
+    rmDir = rmDirI []
+
+    rmDirI :: [Directory] -> String -> [Directory] -> Maybe (Directory, [Directory])
+    rmDirI _ _ [] = Nothing
+    rmDirI visited expectedName (x : xs) =
+      if expectedName == getName x
+      then Just (x, visited ++ xs)
+      else rmDirI (x : visited) expectedName xs
+
+    invertName :: Directory -> Directory
+    invertName (Directory (Info n invName s c r) d f) =
+      Directory (Info invName n s c r) d f
+
+    addDir :: Directory -> Directory -> Directory
+    addDir new (Directory n drs f) = Directory n (new : drs) f
 
 -- |Nothing if dir exists
 mkdir :: Directory -> String -> Maybe Directory
-mkdir (Directory currDir dirs files) newDirName =
+mkdir (Directory currInfo dirs files) newDirName =
   if dirAlreadyExistsIn dirs
   then Nothing
-  else Just $ Directory currDir newDirs files
+  else Just $ Directory currInfo newDirs files
     where
       dirAlreadyExistsIn :: [Directory] -> Bool
-      dirAlreadyExistsIn [] = False
-      dirAlreadyExistsIn (Directory name _ _ : xs) = name == newDirName || dirAlreadyExistsIn xs
+      dirAlreadyExistsIn = foldr (\d -> (||) (getName d == newDirName)) False
 
       newDirs :: [Directory]
-      newDirs = Directory newDirName [] [] : dirs
+      newDirs = Directory (newInfo newDirName) [] [] : dirs
 
 -- |Nothing if file exists
 touch :: Directory -> String -> Maybe Directory
-touch (Directory currDir dirs files) newFileName =
+touch (Directory info dirs files) newFileName =
   if fileAlreadyExistsIn files
   then Nothing -- error $ "File not found: " ++ newFileName
-  else Just $ Directory currDir dirs newFiles
+  else Just $ Directory info dirs newFiles
     where
       fileAlreadyExistsIn :: [File] -> Bool
       fileAlreadyExistsIn [] = False
