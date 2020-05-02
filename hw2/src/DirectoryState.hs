@@ -3,36 +3,53 @@ module DirectoryState where
 import System.Directory
 import Control.Monad (filterM)
 import System.FilePath
+import Data.Time
 
 import Utils
 import Debug.Trace (trace)
+import System.Directory (Permissions)
+import System.Directory.Internal (Permissions)
 
--- TODO: file info: size, etc
--- |File <name> <content>
-data File = File String String
+data CommonInfo = Info
+  { path :: String
+  , name :: String
+  , size :: Integer
+  , perm :: Permissions
+  }
+
+-- | DirInfo CommonInfo <isoName> <countFiles>
+data DirInfo = DirInfo CommonInfo String Int
+
+instance Show CommonInfo where
+  show info = "File \"" ++ name info ++ "\" at " ++ path info ++
+    "\nFile size: " ++ show (size info) ++ "\n" ++ show (perm info)
+
+instance Show DirInfo where
+  show (DirInfo  common _ countFiles) = show common ++ "\nCount files: " ++ show countFiles
+
+-- | FileInfo CommonInfo <content> <lastAccess>
+data File = File CommonInfo Data UTCTime
 
 instance Show File where
-  show (File name con) = name
+  show (File common _ _) = name common 
+--  show (File common _ lastAccess) = show common ++ "\nLast access: " ++ show lastAccess
 
--- | Info <realName> <isoName> <size> <countFiles> <rights TODO: not int>
-data Info = Info String String Int Int Int
-
--- TODO: show info
-instance Show Info where
-  show (Info name _ _ _ _) = name
-
-data Directory = Directory Info [Directory] [File]
+data Directory = Directory DirInfo [Directory] [File]
 
 instance Show Directory where
   show = render ""
 
-getName :: Directory -> String
-getName (Directory (Info name _ _ _ _) _ _) = name
+getFileName :: File -> String
+getFileName (File ci _ _) = name ci
 
+getDirName :: Directory -> String
+getDirName (Directory (DirInfo ci _ _) _ _) = name ci
+
+-- TODO: print DirInfo too
 render :: String -> Directory -> String
-render indent (Directory info subDirs files) =
+render indent curr@(Directory _ subDirs files) =
   let newIndent = indent ++ "| " in
-  show info ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
+  getDirName curr ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
     where
       showWithIndentFile :: String -> [File] -> String
       showWithIndentFile _      [] = ""
@@ -56,9 +73,15 @@ data DirectoryState = DS VCSDirectory Directory
 instance Show DirectoryState where
   show (DS _ curr) = show "### VCS: TODO\n" ++ "### CURR:\n" ++ show curr
 
+emptyInfo :: String -> CommonInfo
+emptyInfo newName =
+  let newPerm = setOwnerReadable True $ setOwnerWritable True emptyPermissions in
+    Info { path = "", name = newName,  size = 0, perm = newPerm }
+
 -- |Make simple Info
-newInfo :: String -> Info
-newInfo name = Info name ".." 0 0 0
+newDirInfo :: String -> DirInfo
+newDirInfo newName = 
+  DirInfo (emptyInfo newName) ".." 0
 
 -- |Create new DirectoryState with argument dir as current
 newDirectoryState :: Directory -> DirectoryState
@@ -74,7 +97,7 @@ readDirectoryState dirName = do
       readDirectory :: String -> IO Directory
       readDirectory name = do
         pathList <- ((toAbsolute name) . skipDot . getDirectoryContents) name
-        d <- readDirs pathList $ Directory (newInfo name) [] []
+        d <- readDirs pathList $ Directory (newDirInfo name) [] []
         readFiles pathList d
 
       readFiles :: [FilePath] -> Directory -> IO Directory
@@ -104,10 +127,21 @@ readVCS :: String -> DirectoryState -> IO DirectoryState
 readVCS _ = return
 
 mkFile :: FilePath -> IO File
-mkFile path = File name <$> content
+mkFile absolutePath = do
+  let (filePath, fileName) = split absolutePath
+  fileSize <- getFileSize absolutePath
+  filePermissions <- getPermissions absolutePath
+  let info = Info { path = filePath, name = fileName, size = fileSize, perm = filePermissions}
+  File info <$> content <*> time
   where
-    name :: FilePath
-    name = takeFileName path --TODO: only name
+    split :: FilePath -> (FilePath, FilePath)
+    split p = (takeDirectory p, takeFileName p)
 
     content :: IO String
-    content = readFile path
+    content = readFile absolutePath
+    
+    time :: IO UTCTime
+    time = getAccessTime absolutePath
+
+type Data = String
+type Name = String

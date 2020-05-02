@@ -1,17 +1,9 @@
-module Lib
-  ( Directory (..)
-  , File (..)
-  , Lib.findFile
-  , cd
-  , dir
-  , mkdir
-  , mkFile
-  , touch
-  ) where
+module Lib where
 
-import Control.Monad.State.Lazy
 import DirectoryState
---import Debug.Trace (trace)
+
+import Data.Time.Clock (UTCTime)
+import Control.Applicative ((<|>))--import Debug.Trace (trace)
 
 -- |Nothing if dir not found
 -- 
@@ -25,10 +17,10 @@ import DirectoryState
 -- rename `..` to `u`
 -- add `v` to `u`'s directories
 cd :: Directory -> String -> Maybe Directory
-cd (Directory info dirs files) name = do
-  (v, other) <- rmDir name dirs
+cd (Directory info dirs files) nextDirName = do
+  (v, other) <- rmDir nextDirName dirs
   let u = Directory info other files
-  let uv = if name == ".."
+  let uv = if nextDirName == ".."
            then (u, invertName v)
            else (invertName u, v)
   Just $ uncurry addDir uv
@@ -39,13 +31,13 @@ cd (Directory info dirs files) name = do
     rmDirI :: [Directory] -> String -> [Directory] -> Maybe (Directory, [Directory])
     rmDirI _ _ [] = Nothing
     rmDirI visited expectedName (x : xs) =
-      if expectedName == getName x
+      if expectedName == getDirName x
       then Just (x, visited ++ xs)
       else rmDirI (x : visited) expectedName xs
 
     invertName :: Directory -> Directory
-    invertName (Directory (Info n invName s c r) d f) =
-      Directory (Info invName n s c r) d f
+    invertName (Directory (DirInfo (Info pathi namei sizei permi) invName c) d f) =
+                Directory (DirInfo (Info pathi invName sizei permi) namei c) d f
 
     addDir :: Directory -> Directory -> Directory
     addDir new (Directory n drs f) = Directory n (new : drs) f
@@ -58,47 +50,107 @@ mkdir (Directory currInfo dirs files) newDirName =
   else Just $ Directory currInfo newDirs files
     where
       dirAlreadyExistsIn :: [Directory] -> Bool
-      dirAlreadyExistsIn = foldr (\d -> (||) (getName d == newDirName)) False
+      dirAlreadyExistsIn = foldr (\d -> (||) (getDirName d == newDirName)) False
 
       newDirs :: [Directory]
-      newDirs = Directory (newInfo newDirName) [] [] : dirs
+      newDirs = Directory (newDirInfo newDirName) [] [] : dirs
 
 -- |Nothing if file exists
-touch :: Directory -> String -> Maybe Directory
-touch (Directory info dirs files) newFileName =
+touch :: Directory -> String -> UTCTime -> Maybe Directory
+touch (Directory info dirs files) newFileName time =
   if fileAlreadyExistsIn files
-  then Nothing -- error $ "File not found: " ++ newFileName
+  then Nothing
   else Just $ Directory info dirs newFiles
     where
       fileAlreadyExistsIn :: [File] -> Bool
-      fileAlreadyExistsIn [] = False
-      fileAlreadyExistsIn (File name _ : xs) = name == newFileName || fileAlreadyExistsIn xs
+      fileAlreadyExistsIn = foldr (\f -> (||) (getFileName f == newFileName)) False
 
       newFiles :: [File]
-      newFiles = File newFileName "" : files
+      newFiles = File (emptyInfo newFileName) "" time : files
 
 dir :: Directory -> String
 dir = show
 
 -- |Nothing if file not found
-cat :: Directory -> File -> Maybe String
-cat currentDir currentFile = undefined
-
--- TODO: rmFile
-rm :: Directory -> String -> Directory
-rm currentDir rmName = undefined
-
--- TODO: support recursive search in subDirs
-findFile :: String -> StateT Directory Maybe File
-findFile fileName = StateT $ \dir@(Directory _ _ files) -> traverse' (getFile files, dir) 
+cat :: Directory -> Name -> Maybe Data
+cat (Directory _ _ files) expectedName = find files
   where
-    traverse' :: (Maybe a, b) -> Maybe (a, b)
-    traverse' (Just l, r) = Just (l, r)
-    traverse' _           = Nothing
+    find :: [File] -> Maybe Data
+    find [] = Nothing
+    find (x@(File _ content _) : xs) =
+      if getFileName x == expectedName
+      then Just content
+      else find xs
+
+rm :: Directory -> Name -> Maybe Directory
+rm (Directory i dirs files) expectedName =
+  let newFiles = rmFile [] files
+      newDirs  = rmDir [] dirs in
+  case (newFiles, newDirs) of
+    (Nothing, Nothing) -> Nothing
+    (Just fs, _      ) -> Just $ Directory i dirs fs
+    (_      , Just ds) -> Just $ Directory i ds files
+  where
+    rmDir :: [Directory] -> [Directory] -> Maybe [Directory]
+    rmDir _ [] = Nothing
+    rmDir pref (x : xs) =
+      if getDirName x == expectedName
+      then Just $ pref ++ xs
+      else rmDir (x : pref) xs
     
-    getFile :: [File] -> Maybe File
-    getFile [] = Nothing
-    getFile (file@(File currName _) : xs) =
-      if currName == fileName
-      then Just file
-      else getFile xs
+    rmFile :: [File] -> [File] -> Maybe [File]
+    rmFile _ [] = Nothing
+    rmFile pref (x : xs) =
+      if getFileName x == expectedName
+      then Just $ pref ++ xs
+      else rmFile (x : pref) xs
+
+-- TODO: dir info
+showInfo :: Directory -> Name -> Maybe Data
+showInfo (Directory _ _ files) expectedName = findInfo files
+  where
+    findInfo :: [File] -> Maybe Data
+    findInfo [] = Nothing
+    findInfo (x@(File common _ access) : xs) =
+      if getFileName x == expectedName
+      then Just $ show common ++ "\nLast access: " ++ show access
+      else findInfo xs
+
+-- TODO: change file size
+rewriteFile :: Directory -> Name -> Data -> Maybe Directory
+rewriteFile (Directory i d files) expectedName newContent =
+  Just . Directory i d =<< write files
+  where
+    write :: [File] -> Maybe [File]
+    write [] = Nothing
+    write (x@(File info _ time) : xs) =
+      if getFileName x == expectedName
+      then Just $ File info newContent time : xs
+      else fmap ((:) x) (write xs)
+
+-- TODO: change file size
+addToFile :: Directory -> Name -> Data -> Maybe Directory
+addToFile (Directory i d files) expectedName newContent =
+    Just . Directory i d =<< add files
+  where
+    add :: [File] -> Maybe [File]
+    add [] = Nothing
+    add (x@(File info content time) : xs) =
+      if getFileName x == expectedName
+      then Just $ File info (content ++ newContent) time : xs
+      else fmap ((:) x) (add xs)
+
+--TODO: return Maybe Data - path to file
+findFile :: Directory -> Name -> Maybe File
+findFile (Directory _ dirs files) expectedName = searchInFiles files <|> searchInDirs dirs
+  where
+    searchInFiles :: [File] -> Maybe File
+    searchInFiles [] = Nothing
+    searchInFiles (x : xs) =
+      if getFileName x == expectedName
+      then Just x
+      else searchInFiles xs
+
+    searchInDirs :: [Directory] -> Maybe File
+    searchInDirs [] = Nothing
+    searchInDirs (x : xs) = findFile x expectedName <|> searchInDirs xs
