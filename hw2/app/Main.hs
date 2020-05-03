@@ -59,26 +59,26 @@ evalCommand :: Command -> DirectoryState -> (String, DirectoryState)
 evalCommand c oldState@(DS vcs d) = match c
   where
     match :: Command -> (String, DirectoryState)
-    match Dir                   = (dir d, oldState)
-    match (MkDir  dirName)      = handleDir  "Directory already exists" $ mkdir d dirName
-    match (Cd     dirName)      = handleDir  "Directory not found"      $ cd    d dirName
-    match (Rm     objName)      = handleDir  "Object not found"         $ rm    d objName
-    match (Cat   fileName)      = handleData "File not found"           $ cat   d fileName
-    match (Main.Info   objName) = handleData "Object not found"         $ showInfo d objName
---    match (Find  fileName)      = handleData "File not found"           $ findFile d fileName
-    match (Touch fileName time) = handleDir  "File already exists"      $ touch d fileName time
-    match (Write fileName content) = handleDir "File not found"         $ rewriteFile d fileName content
-    match (Add   fileName content) = handleDir "File not found"         $ addToFile   d fileName content
-    match Exit  = undefined
-    match _     = handleDir "Unexpected input" Nothing
+    match Dir                      = (dir d, oldState)
+    match (MkDir  dirName)         = handleDir  $ mkdir d dirName
+    match (Cd     dirName)         = handleDir  $ cd    d dirName
+    match (Rm     objName)         = handleDir  $ rm    d objName
+    match (Cat   fileName)         = handleData $ cat   d fileName
+    match (Main.Info   objName)    = handleData $ showInfo d objName
+    match (Find  fileName)         = handleData $ findFile d fileName
+    match (Touch fileName time)    = handleDir  $ touch d fileName time
+    match (Write fileName content) = handleDir  $ rewriteFile d fileName content
+    match (Add   fileName content) = handleDir  $ addToFile   d fileName content
+    match Exit                     = undefined
+    match _                        = ("Unexpected input", oldState)
 
-    handleDir :: String -> Maybe Directory -> (String, DirectoryState)
-    handleDir _       (Just dd) = ("", DS vcs dd)
-    handleDir message Nothing   = (message, oldState)
-    
-    handleData :: String -> Maybe Data -> (String, DirectoryState)
-    handleData _   (Just msg) = (msg, oldState)
-    handleData err Nothing    = (err, oldState)
+    handleDir :: OpMonad Directory -> (String, DirectoryState)
+    handleDir (Left     err) = (show err, oldState)
+    handleDir (Right newDir) = ("",  DS vcs newDir)
+
+    handleData :: OpMonad Data -> (String, DirectoryState)
+    handleData (Left      err) = (show err, oldState)
+    handleData (Right content) = (content,  oldState)
 
 showResult :: String -> IO ()
 showResult = putStrLn

@@ -39,17 +39,26 @@ data Directory = Directory DirInfo [Directory] [File]
 instance Show Directory where
   show = render ""
 
-getFileName :: File -> String
+fullName :: CommonInfo -> Name
+fullName info = path info ++ "/" ++ name info
+
+getFileName :: File -> Name
 getFileName (File ci _ _) = name ci
 
-getDirName :: Directory -> String
+getFullFileName :: File -> Name
+getFullFileName (File ci _ _) = fullName ci
+
+getDirName :: Directory -> Name
 getDirName (Directory (DirInfo ci _ _) _ _) = name ci
+
+getFullDirName :: Directory -> Name
+getFullDirName (Directory (DirInfo ci _ _) _ _) = fullName ci
 
 -- TODO: print DirInfo too
 render :: String -> Directory -> String
 render indent curr@(Directory _ subDirs files) =
   let newIndent = indent ++ "| " in
-  getDirName curr ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
+  getFullDirName curr ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
     where
       showWithIndentFile :: String -> [File] -> String
       showWithIndentFile _      [] = ""
@@ -73,15 +82,15 @@ data DirectoryState = DS VCSDirectory Directory
 instance Show DirectoryState where
   show (DS _ curr) = show "### VCS: TODO\n" ++ "### CURR:\n" ++ show curr
 
-emptyInfo :: String -> CommonInfo
-emptyInfo newName =
+emptyInfo :: FilePath -> Name -> CommonInfo
+emptyInfo newPath newName =
   let newPerm = setOwnerReadable True $ setOwnerWritable True emptyPermissions in
-    Info { path = "", name = newName,  size = 0, perm = newPerm }
+    Info { path = newPath, name = newName,  size = 0, perm = newPerm }
 
 -- |Make simple Info
-newDirInfo :: String -> DirInfo
-newDirInfo newName = 
-  DirInfo (emptyInfo newName) ".." 0
+newDirInfo :: FilePath -> Name -> DirInfo
+newDirInfo newPath newName = 
+  DirInfo (emptyInfo newPath newName) ".." 0
 
 -- |Create new DirectoryState with argument dir as current
 newDirectoryState :: Directory -> DirectoryState
@@ -96,8 +105,8 @@ readDirectoryState dirName = do
     where
       readDirectory :: String -> IO Directory
       readDirectory name = do
-        pathList <- ((toAbsolute name) . skipDot . getDirectoryContents) name
-        d <- readDirs pathList $ Directory (newDirInfo name) [] []
+        pathList <- (toAbsolute name . skipDot . getDirectoryContents) name
+        d <- readDirs pathList $ Directory (newDirInfo (takeDirectory name) (takeFileName name)) [] []
         readFiles pathList d
 
       readFiles :: [FilePath] -> Directory -> IO Directory
