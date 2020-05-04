@@ -80,7 +80,7 @@ touch (Directory info dirs files) newFileName time =
       newFiles :: [File]
       newFiles = 
         let newPath = case info of (DirInfo ci _ _) -> fullName ci in
-        File (emptyInfo newPath newFileName) "" time : files
+        File (emptyInfo newPath newFileName) "" [] time : files
 
 dir :: Directory -> String
 dir = show
@@ -102,15 +102,12 @@ cat (Directory _ _ files) expectedName = find files
   where
     find :: [File] -> OpMonad Data
     find [] = throwError $ FileNotFound expectedName
-    find (x@(File _ content _) : xs) =
+    find (x : xs) =
       if getFileName x == expectedName
-      then if isReadable x
-           then return content
+      then if isReadableFile x
+           then return $ content x
            else throwError NoPermissions
       else find xs
-    
-    isReadable :: File -> Bool
-    isReadable (File ci _ _) = readable (perm ci)
 
 rm :: Directory -> Name -> OpMonad Directory
 rm (Directory i dirs files) expectedName =
@@ -132,14 +129,10 @@ rm (Directory i dirs files) expectedName =
     rmFile _ [] = throwError $ FileNotFound expectedName
     rmFile pref (x : xs) =
       if getFileName x == expectedName
-      then if isWritable x
+      then if isWritableFile x
            then return $ pref ++ xs
            else throwError NoPermissions
       else rmFile (x : pref) xs
-    
-    -- TODO: move to utils
-    isWritable :: File -> Bool
-    isWritable (File ci _ _) = writable (perm ci)
 
 -- TODO: dir info
 showInfo :: Directory -> Name -> OpMonad Data
@@ -147,7 +140,7 @@ showInfo (Directory _ _ files) expectedName = findInfo files
   where
     findInfo :: [File] -> OpMonad Data
     findInfo [] = throwError $ FileNotFound expectedName
-    findInfo (x@(File common _ access) : xs) =
+    findInfo (x@(File common _ _ access) : xs) =
       if getFileName x == expectedName
       then return $ show common ++ "\nLast access: " ++ show access
       else findInfo xs
@@ -159,16 +152,12 @@ rewriteFile (Directory i d files) expectedName newContent =
   where
     write :: [File] -> OpMonad [File]
     write [] = throwError $ FileNotFound expectedName
-    write (x@(File info _ time) : xs) =
+    write (x@(File info _ revs time) : xs) =
       if getFileName x == expectedName
-      then if isWritable x
-           then return $ File info newContent time : xs
+      then if isWritableFile x
+           then return $ File info newContent revs time : xs
            else throwError NoPermissions
       else fmap ((:) x) (write xs)
-    
-    -- TODO: move to utils
-    isWritable :: File -> Bool
-    isWritable (File ci _ _) = writable (perm ci)
 
 -- TODO: change file size
 addToFile :: Directory -> Name -> Data -> OpMonad Directory
@@ -177,16 +166,12 @@ addToFile (Directory i d files) expectedName newContent =
   where
     add :: [File] -> OpMonad [File]
     add [] = throwError $ FileNotFound expectedName
-    add (x@(File info content time) : xs) =
+    add (x@(File info content revs time) : xs) =
       if getFileName x == expectedName
-      then if isWritable x 
-           then return $ File info (content ++ newContent) time : xs
+      then if isWritableFile x 
+           then return $ File info (content ++ newContent) revs time : xs
            else throwError NoPermissions
       else fmap ((:) x) (add xs)
-    
-    -- TODO: move to utils
-    isWritable :: File -> Bool
-    isWritable (File ci _ _) = writable (perm ci)
 
 findFile :: Directory -> Name -> OpMonad Data
 findFile (Directory _ dirs files) expectedName = searchInFiles files `opOr` searchInDirs dirs

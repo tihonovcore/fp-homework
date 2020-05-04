@@ -28,10 +28,15 @@ instance Show DirInfo where
   show (DirInfo  common _ countFiles) = show common ++ "\nCount files: " ++ show countFiles
 
 -- | FileInfo CommonInfo <content> <lastAccess>
-data File = File CommonInfo Data UTCTime
+data File = File
+  { commonInfo :: CommonInfo
+  , content :: Data
+  , revisions :: [Data] 
+  , lastAccess :: UTCTime
+  }
 
 instance Show File where
-  show (File common _ _) = name common 
+  show = name . commonInfo 
 --  show (File common _ lastAccess) = show common ++ "\nLast access: " ++ show lastAccess
 
 data Directory = Directory DirInfo [Directory] [File]
@@ -40,16 +45,13 @@ instance Show Directory where
   show = render ""
 
 fullName :: CommonInfo -> Name
-fullName info = path info ++ "/" ++ name info
+fullName info = joinPath [path info, name info]
 
 getFileName :: File -> Name
-getFileName (File ci _ _) = name ci
+getFileName = name . commonInfo
 
 getFullFileName :: File -> Name
-getFullFileName (File ci _ _) = fullName ci
-
-getFileContent :: File -> Data
-getFileContent (File _ content _) = content
+getFullFileName = fullName . commonInfo
 
 getDirName :: Directory -> Name
 getDirName (Directory (DirInfo ci _ _) _ _) = name ci
@@ -75,16 +77,6 @@ render indent curr@(Directory _ subDirs files) =
       ln [] = ""
       ln _  = "\n"
 
--- TODO: check is ok?
-data VCSFile = VCSFile String [File]
-data VCSDirectory = VCSDirectory String [VCSDirectory] [VCSFile]
-
--- | <vcsDir> <currDir>
-data DirectoryState = DS VCSDirectory Directory
-
-instance Show DirectoryState where
-  show (DS _ curr) = show "### VCS: TODO\n" ++ "### CURR:\n" ++ show curr
-
 emptyInfo :: FilePath -> Name -> CommonInfo
 emptyInfo newPath newName =
   let newPerm = setOwnerReadable True $ setOwnerWritable True emptyPermissions in
@@ -95,16 +87,12 @@ newDirInfo :: FilePath -> Name -> DirInfo
 newDirInfo newPath newName = 
   DirInfo (emptyInfo newPath newName) ".." 0
 
--- |Create new DirectoryState with argument dir as current
-newDirectoryState :: Directory -> DirectoryState
-newDirectoryState = DS (VCSDirectory "empty" [] [])
-
 -- |Read DirectoryState from file system
 -- TODO: clear
-readDirectoryState :: String -> IO DirectoryState
+readDirectoryState :: String -> IO Directory
 readDirectoryState dirName = do
   directory <- readDirectory dirName
-  readVCS dirName $ newDirectoryState directory
+  readVCS dirName $ directory
     where
       readDirectory :: String -> IO Directory
       readDirectory name = do
@@ -135,7 +123,7 @@ readDirectoryState dirName = do
 -- | <path to dir> <state>
 -- Add VCSState to State
 -- TODO: read VCS
-readVCS :: String -> DirectoryState -> IO DirectoryState
+readVCS :: String -> Directory -> IO Directory
 readVCS _ = return
 
 mkFile :: FilePath -> IO File
@@ -144,7 +132,7 @@ mkFile absolutePath = do
   fileSize <- getFileSize absolutePath
   filePermissions <- getPermissions absolutePath
   let info = Info { path = filePath, name = fileName, size = fileSize, perm = filePermissions}
-  File info <$> content <*> time
+  File info <$> content <*> return [] <*> time
   where
     split :: FilePath -> (FilePath, FilePath)
     split p = (takeDirectory p, takeFileName p)
@@ -155,11 +143,11 @@ mkFile absolutePath = do
     time :: IO UTCTime
     time = getAccessTime absolutePath
 
-writeDirectoryState :: DirectoryState -> IO ()
-writeDirectoryState (DS vcs d) = writeVCS vcs >> writeDir d
+writeDirectoryState :: Directory -> IO ()
+writeDirectoryState d = {-writeVCS vcs >>-} writeDir d
   where
-    writeVCS :: VCSDirectory -> IO ()
-    writeVCS _ = return ()
+--    writeVCS :: VCSDirectory -> IO ()
+--    writeVCS _ = return ()
 
     writeDir :: Directory -> IO ()
     writeDir (Directory (DirInfo ci _ _) dirs files) = do
@@ -176,14 +164,17 @@ writeDirectoryState (DS vcs d) = writeVCS vcs >> writeDir d
     writeFiles :: [File] -> IO ()
     writeFiles [] = return ()
     writeFiles (x : xs) = do
-      length (getFileContent x) `seq` return ()
-      if isWritable x
-      then writeFile (getFullFileName x) (getFileContent x)
+      length (content x) `seq` return ()
+      if isWritableFile x
+      then writeFile (getFullFileName x) (content x)
       else return ()
       writeFiles xs
 
-    isWritable :: File -> Bool
-    isWritable (File info _ _) = readable $ perm info 
+isWritableFile :: File -> Bool
+isWritableFile = writable . perm . commonInfo
+
+isReadableFile :: File -> Bool
+isReadableFile = readable . perm . commonInfo
 
 type Data = String
 type Name = String

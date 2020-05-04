@@ -4,9 +4,7 @@ import DirectoryState
 import Test.Hspec
 
 startDirectory :: IO Directory
-startDirectory = do
-  fs <- readDirectoryState "/home/tihonovcore/fp-homework/hw2/testData"
-  case fs of (DS _ d) -> return d
+startDirectory = readDirectoryState "/home/tihonovcore/fp-homework/hw2/testData"
 
 catr :: Name -> OpMonad Directory -> OpMonad Data
 catr name' = (=<<) (`cat` name')
