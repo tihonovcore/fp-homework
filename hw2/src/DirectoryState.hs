@@ -48,6 +48,9 @@ getFileName (File ci _ _) = name ci
 getFullFileName :: File -> Name
 getFullFileName (File ci _ _) = fullName ci
 
+getFileContent :: File -> Data
+getFileContent (File _ content _) = content
+
 getDirName :: Directory -> Name
 getDirName (Directory (DirInfo ci _ _) _ _) = name ci
 
@@ -151,6 +154,36 @@ mkFile absolutePath = do
     
     time :: IO UTCTime
     time = getAccessTime absolutePath
+
+writeDirectoryState :: DirectoryState -> IO ()
+writeDirectoryState (DS vcs d) = writeVCS vcs >> writeDir d
+  where
+    writeVCS :: VCSDirectory -> IO ()
+    writeVCS _ = return ()
+
+    writeDir :: Directory -> IO ()
+    writeDir (Directory (DirInfo ci _ _) dirs files) = do
+      createDirectoryIfMissing False (fullName ci)
+      writeDirs  dirs
+      writeFiles files
+
+    writeDirs :: [Directory] -> IO ()
+    writeDirs [] = return ()
+    writeDirs (x : xs) = do
+      writeDir x
+      writeDirs xs
+
+    writeFiles :: [File] -> IO ()
+    writeFiles [] = return ()
+    writeFiles (x : xs) = do
+      length (getFileContent x) `seq` return ()
+      if isWritable x
+      then writeFile (getFullFileName x) (getFileContent x)
+      else return ()
+      writeFiles xs
+
+    isWritable :: File -> Bool
+    isWritable (File info _ _) = readable $ perm info 
 
 type Data = String
 type Name = String

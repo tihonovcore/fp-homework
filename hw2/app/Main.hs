@@ -21,9 +21,13 @@ loop content = do
   hSetBuffering stdout NoBuffering
   putStr "> "
   command <- getCommand
-  let (result, newContent) = evalCommand command content
-  showResult result
-  loop newContent
+  case evalCommand command content of
+    Just (result, newContent) -> do
+      showResult result
+      loop newContent
+    Nothing -> do
+      writeDirectoryState content
+      return ()
 
 data Command = Dir
              | MkDir String
@@ -55,11 +59,11 @@ getCommand = do
                  | otherwise     -> return Error
 
 -- TODO: work with vcs
-evalCommand :: Command -> DirectoryState -> (String, DirectoryState)
+evalCommand :: Command -> DirectoryState -> Maybe (String, DirectoryState)
 evalCommand c oldState@(DS vcs d) = match c
   where
-    match :: Command -> (String, DirectoryState)
-    match Dir                      = (dir d, oldState)
+    match :: Command -> Maybe (String, DirectoryState)
+    match Dir                      = Just (dir d, oldState)
     match (MkDir  dirName)         = handleDir  $ mkdir d dirName
     match (Cd     dirName)         = handleDir  $ cd    d dirName
     match (Rm     objName)         = handleDir  $ rm    d objName
@@ -69,16 +73,16 @@ evalCommand c oldState@(DS vcs d) = match c
     match (Touch fileName time)    = handleDir  $ touch d fileName time
     match (Write fileName content) = handleDir  $ rewriteFile d fileName content
     match (Add   fileName content) = handleDir  $ addToFile   d fileName content
-    match Exit                     = undefined
-    match _                        = ("Unexpected input", oldState)
+    match Exit                     = Nothing
+    match _                        = Just ("Unexpected input", oldState)
 
-    handleDir :: OpMonad Directory -> (String, DirectoryState)
-    handleDir (Left     err) = (show err, oldState)
-    handleDir (Right newDir) = ("",  DS vcs newDir)
+    handleDir :: OpMonad Directory -> Maybe (String, DirectoryState)
+    handleDir (Left     err) = Just (show err, oldState)
+    handleDir (Right newDir) = Just ("",  DS vcs newDir)
 
-    handleData :: OpMonad Data -> (String, DirectoryState)
-    handleData (Left      err) = (show err, oldState)
-    handleData (Right content) = (content,  oldState)
+    handleData :: OpMonad Data -> Maybe (String, DirectoryState)
+    handleData (Left      err) = Just (show err, oldState)
+    handleData (Right content) = Just (content,  oldState)
 
 showResult :: String -> IO ()
 showResult = putStrLn

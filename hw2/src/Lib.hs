@@ -79,7 +79,7 @@ touch (Directory info dirs files) newFileName time =
 
       newFiles :: [File]
       newFiles = 
-        let newPath = case info of (DirInfo ci _ _) -> path ci in 
+        let newPath = case info of (DirInfo ci _ _) -> fullName ci in
         File (emptyInfo newPath newFileName) "" time : files
 
 dir :: Directory -> String
