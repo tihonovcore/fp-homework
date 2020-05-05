@@ -52,7 +52,7 @@ cd (Directory info dirs files) expectedName = do
 -- |Nothing if dir exists
 mkdir :: Directory -> String -> OpMonad Directory
 mkdir curr@(Directory currInfo dirs files) newDirName
-  | dirAlreadyExistsIn dirs = throwError $ DirNotFound newDirName
+  | dirAlreadyExistsIn dirs = throwError $ DirAlreadyExists newDirName
   | isWritable curr = return $ Directory currInfo newDirs files
   | otherwise = throwError NoPermissions
   where
@@ -69,13 +69,16 @@ mkdir curr@(Directory currInfo dirs files) newDirName
 
 -- |Nothing if file exists
 touch :: Directory -> String -> UTCTime -> OpMonad Directory
-touch (Directory info dirs files) newFileName time =
-  if fileAlreadyExistsIn files
-  then throwError $ FileAlreadyExists newFileName
-  else return $ Directory info dirs newFiles
+touch (Directory info dirs files) newFileName time
+  | fileAlreadyExistsIn files = throwError $ FileAlreadyExists newFileName
+  | dirAlreadyExistsIn dirs   = throwError $ DirAlreadyExists  newFileName
+  | otherwise                 = return $ Directory info dirs newFiles
     where
       fileAlreadyExistsIn :: [File] -> Bool
       fileAlreadyExistsIn = foldr (\f -> (||) (getFileName f == newFileName)) False
+      
+      dirAlreadyExistsIn :: [Directory] -> Bool
+      dirAlreadyExistsIn = foldr (\f -> (||) (getDirName f == newFileName)) False
 
       newFiles :: [File]
       newFiles = 
@@ -91,6 +94,7 @@ data OpError = FileNotFound   Name
              | NoPermissions
              | FileAlreadyExists Name
              | DirAlreadyExists  Name
+             | WrongRevisionIndex Name
              | Seq OpError OpError
   deriving (Eq, Show)
 
@@ -160,16 +164,16 @@ rewriteFile (Directory i d files) expectedName newContent =
       else fmap ((:) x) (write xs)
 
 -- TODO: change file size
-addToFile :: Directory -> Name -> Data -> OpMonad Directory
-addToFile (Directory i d files) expectedName newContent =
+append :: Directory -> Name -> Data -> OpMonad Directory
+append (Directory i d files) expectedName newContent =
     Right . Directory i d =<< add files
   where
     add :: [File] -> OpMonad [File]
     add [] = throwError $ FileNotFound expectedName
-    add (x@(File info content revs time) : xs) =
+    add (x@(File info oldContent revs time) : xs) =
       if getFileName x == expectedName
       then if isWritableFile x 
-           then return $ File info (content ++ newContent) revs time : xs
+           then return $ File info (oldContent ++ newContent) revs time : xs
            else throwError NoPermissions
       else fmap ((:) x) (add xs)
 
