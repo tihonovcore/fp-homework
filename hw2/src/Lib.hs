@@ -91,9 +91,10 @@ dir = show
 data OpError = FileNotFound   Name
              | DirNotFound    Name
              | ObjectNotFound Name 
+             | FileNotInVcs   Name
              | NoPermissions
-             | FileAlreadyExists Name
-             | DirAlreadyExists  Name
+             | FileAlreadyExists  Name
+             | DirAlreadyExists   Name
              | WrongRevisionIndex Name
              | Seq OpError OpError
   deriving (Eq, Show)

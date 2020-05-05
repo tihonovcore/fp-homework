@@ -31,7 +31,9 @@ log expectedName (Directory _ _ files) = logRender <$> getRevisions files
     getRevisions [] = throwError $ FileNotFound expectedName
     getRevisions (file : xs) =
       if getFileName file == expectedName
-      then return $ revisions file
+      then if fileInVcs file
+           then return $ revisions file
+           else throwError $ FileNotInVcs expectedName
       else getRevisions xs
 
     logRender :: [Data] -> Data
@@ -39,6 +41,9 @@ log expectedName (Directory _ _ files) = logRender <$> getRevisions files
       where
         renderRev :: Int -> Data -> Data
         renderRev n cont = "### " ++ show n ++ ": \n" ++ cont
+    
+    fileInVcs :: File -> Bool
+    fileInVcs = not . null . revisions 
 
 -- TODO: !null revs
 -- TODO: comment

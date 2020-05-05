@@ -18,7 +18,7 @@ data CommonInfo = Info
   }
 
 -- | DirInfo CommonInfo <isoName> <countFiles>
-data DirInfo = DirInfo CommonInfo String Int
+data DirInfo = DirInfo CommonInfo Name Int
 
 instance Show CommonInfo where
   show info = "File \"" ++ name info ++ "\" at " ++ path info ++

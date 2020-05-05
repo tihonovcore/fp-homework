@@ -84,7 +84,7 @@ main = hspec $ do
       d <- startDirectory
       catr "close" (rewriteFile d "close" "lalalalal") `shouldBe` Left NoPermissions
 
-  describe "addToFile" $ do
+  describe "append" $ do
     it "succ" $ do
       d <- startDirectory
       --TODO use current time to check changes
@@ -149,11 +149,153 @@ main = hspec $ do
       d <- startDirectory
       dirr (mkdir d "cats") `shouldBe` Left (DirAlreadyExists "cats")
 
---TODO: find file
+  describe "add & log" $ do
+    it "add: ok, log: ok" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "test331"
+      let d2 = add "lala" =<< d1
+      let d3 = VCSCommands.log "lala" =<< d2
+      d3 `shouldBe` Right "\n### 1: \ntest331"
+    it "add: fail, log: ok" $ do
+      d0 <- startDirectory
+      let d1 = add "banditka" d0
+      let d2 = VCSCommands.log "lala" =<< d1
+      d2 `shouldBe` Left (FileNotFound "banditka")
+    it "add: ok, log: fail" $ do
+      d0 <- startDirectory
+      let d1 = VCSCommands.log "tatata" d0
+      d1 `shouldBe` Left (FileNotFound "tatata")
 
---TODO: touch
--- Создать файл и проверить путь (должен быть полный)
+  describe "commit" $ do
+    it "success" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "tessa"
+      let d2 = add "lala" =<< d1
+      let d3 = (\d -> append d "lala" " russian forward") =<< d2
+      let d4 = commit "lala" =<< d3
+      let d5 = VCSCommands.log "lala" =<< d4
+      d5 `shouldBe` Right "\n### 1: \ntessa\n### 2: \ntessa russian forward"
+    it "file not found" $ do
+      d0 <- startDirectory
+      let d1 = commit "whatHappendWithTheSubmarine" d0
+      let d2 = VCSCommands.log "whatHappendWithTheSubmarine" =<< d1
+      d2 `shouldBe` Left (FileNotFound "whatHappendWithTheSubmarine")
+    it "file not in vcs" $ do
+      d0 <- startDirectory
+      let d1 = commit "onaUtanula" d0
+      let d2 = VCSCommands.log "onaUtanula" =<< d1
+      d2 `shouldBe` Left (FileNotFound "onaUtanula") --TODO: FileNotInVcsError
+      --TODO: file in subdir
+--    it "file in sub directory" $ do
+--      d0 <- startDirectory
+--      let d1 = commit "whatHappendWithTheSubmarine" d0
+--      let d2 = VCSCommands.log "lala" =<< d1
+--      d2 `shouldBe` Left (FileNotFound "whatHappendWithTheSubmarine")
 
---TODO: mkdir
+  describe "remove file from vcs" $ do
+    it "success" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "дурсли не любили гарри, потому что он крестраж и они более уязвимы к магии, чем его друзья"
+      let d2 = add "lala" =<< d1
+      let d3 = (\d -> append d "lala" "\nого! вот так теория") =<< d2
+      let d4 = commit "lala" =<< d3
+      let d5 = rmFileFromVcs "lala" =<< d4
+      let d6 = VCSCommands.log "lala" =<< d5
+      d6 `shouldBe` Left (FileNotInVcs "lala")
+    it "file not found" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "europe" "make make grate again"
+      let d2 = add "europe" =<< d1
+      let d3 = (\d -> append d "europe" "\nstop using make") =<< d2
+      let d4 = commit "europe" =<< d3
+      let d5 = rmFileFromVcs "europe" =<< d4
+      let d6 = VCSCommands.log "europe" =<< d5
+      d6 `shouldBe` Left (FileNotFound "europe")
+      --TODO: file in subdir
+--    it "file in subdir" $ do
+--      d0 <- startDirectory
+--      let d1 = rewriteFile d0 "lala" "дурсли не любили гарри, потому что он крестраж и они более уязвимы к магии, чем его друзья"
+--      let d2 = add "lala" =<< d1
+--      let d3 = (\d -> append d "lala" "\nого! вот так теория") =<< d2
+--      let d4 = commit "lala" =<< d3
+--      let d5 = rmFileFromVcs "lala" =<< d4
+--      let d6 = VCSCommands.log "lala" =<< d5
+--      d6 `shouldBe` Left (FileNotFound "")
 
---TODO: cd
+  describe "show revisions" $ do
+    it "success" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "anotherFile" "3rd may 2020. 7025 dead brazillians. their president: * happy *"
+      let d2 = add "anotherFile" =<< d1
+      let d3 = (\d -> append d "anotherFile" "adfsdf") =<< d2
+      let d4 = commit "anotherFile" =<< d3
+      let d5 = showRevision "anotherFile" 1 =<< d4
+      d5 `shouldBe` Right "3rd may 2020. 7025 dead brazillians. their president: * happy *"
+    it "file not found" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "melissaTea" "как перестать пить чай и начать пить"
+      let d2 = add "melissaTea" =<< d1
+      let d3 = (\d -> append d "melissaTea" "\n и начать пить") =<< d2
+      let d4 = commit "melissaTea" =<< d3
+      let d5 = showRevision "melissaTea" 2 =<< d4
+      d5 `shouldBe` Left (FileNotFound "melissaTea")
+    it "too big" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "anotherFile" "errrrrorororo"
+      let d2 = add "anotherFile" =<< d1
+      let d3 = (\d -> append d "anotherFile" "nana") =<< d2
+      let d4 = commit "anotherFile" =<< d3
+      let d5 = showRevision "anotherFile" 1345 =<< d4
+      d5 `shouldBe` Left (WrongRevisionIndex "anotherFile")
+    it "too small" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "anotherFile" "some text"
+      let d2 = add "anotherFile" =<< d1
+      let d3 = (\d -> append d "anotherFile" "\nлашадь") =<< d2
+      let d4 = commit "anotherFile" =<< d3
+      let d5 = showRevision "anotherFile" (-133) =<< d4
+      d5 `shouldBe` Left (WrongRevisionIndex "anotherFile")
+      --TODO: file in subdir
+--    it "file in subdir" $ do
+--      d0 <- startDirectory
+--      let d1 = rewriteFile d0 "lala" "дурсли не любили гарри, потому что он крестраж и они более уязвимы к магии, чем его друзья"
+--      let d2 = add "lala" =<< d1
+--      let d3 = (\d -> append d "lala" "\nого! вот так теория") =<< d2
+--      let d4 = commit "lala" =<< d3
+--      let d5 = rmFileFromVcs "lala" =<< d4
+--      let d6 = VCSCommands.log "lala" =<< d5
+--      d6 `shouldBe` Left (FileNotFound "")
+
+  describe "vcs composition" $ do
+    it "add -> rewrite -> commit -> log" $ do
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "landasd"
+      let d2 = add "lala" =<< d1
+      let d3 = (\d -> rewriteFile d "lala" "londan") =<< d2
+      let d4 = (\d -> commit "lala" d) =<< d3
+      let result = (\d -> VCSCommands.log "lala" d) =<< d4
+      result `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan"
+
+    it "merge" $ do
+      -- VCS default action begin
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "landasd"
+      let d2 = add "lala" =<< d1
+      let d3 = (\d -> rewriteFile d "lala" "londan") =<< d2
+      let d4 = (\d -> commit "lala" d) =<< d3
+      -- VCS default action end
+
+      let left  = merge "lala" 1 2 MSLeft  =<< d4
+      let leftLog = VCSCommands.log "lala" =<< left
+      leftLog `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nlandasd"
+
+      let right  = merge "lala" 1 2 MSRight =<< d4
+      let rightLog = VCSCommands.log "lala" =<< right
+      rightLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nlondand"
+
+      let both  = merge "lala" 1 2 MSBoth  =<< d4
+      let bothLog = VCSCommands.log "lala" =<< both
+      bothLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nl\na >>> o\nnda\ns >>> n\nd"
+
+-- TODO: init ??
+-- TODO: history
