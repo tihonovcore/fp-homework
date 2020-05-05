@@ -39,7 +39,11 @@ instance Show File where
   show = name . commonInfo 
 --  show (File common _ lastAccess) = show common ++ "\nLast access: " ++ show lastAccess
 
-data Directory = Directory DirInfo [Directory] [File]
+data Directory = Directory
+  { dirInfo  :: DirInfo
+  , subDirs  :: [Directory]
+  , subFiles :: [File]
+  }
 
 instance Show Directory where
   show = render ""
@@ -61,17 +65,19 @@ getFullDirName (Directory (DirInfo ci _ _) _ _) = fullName ci
 
 -- TODO: print DirInfo too
 render :: String -> Directory -> String
-render indent curr@(Directory _ subDirs files) =
-  let newIndent = indent ++ "| " in
-  getFullDirName curr ++ "\n" ++ showWithIndentDir newIndent subDirs ++ showWithIndentFile newIndent files
+render indent currDir =
+  let newIndent = indent ++ "| "
+      dirs  = subDirs  currDir
+      files = subFiles currDir in
+  getFullDirName currDir ++ "\n" ++ showWithIndentDir newIndent dirs ++ showWithIndentFile newIndent files
     where
       showWithIndentFile :: String -> [File] -> String
       showWithIndentFile _      [] = ""
-      showWithIndentFile indent (x : xs) = indent ++ show x ++ ln xs ++ showWithIndentFile indent xs
+      showWithIndentFile currIndent (x : xs) = currIndent ++ show x ++ ln xs ++ showWithIndentFile currIndent xs
 
       showWithIndentDir :: String -> [Directory] -> String
       showWithIndentDir _      [] = ""
-      showWithIndentDir indent (x : xs) = indent ++ render indent x ++ "\n" ++ showWithIndentDir indent xs
+      showWithIndentDir currIndent (x : xs) = currIndent ++ render currIndent x ++ "\n" ++ showWithIndentDir currIndent xs
 
       ln :: [a] -> String
       ln [] = ""
@@ -89,29 +95,29 @@ newDirInfo newPath newName =
 
 -- |Read DirectoryState from file system
 -- TODO: clear
-readDirectoryState :: String -> IO Directory
+readDirectoryState :: Name -> IO Directory
 readDirectoryState dirName = do
   directory <- readDirectory dirName
-  readVCS dirName $ directory
+  readVCS dirName directory
     where
-      readDirectory :: String -> IO Directory
-      readDirectory name = do
-        pathList <- (toAbsolute name . skipDot . getDirectoryContents) name
-        d <- readDirs pathList $ Directory (newDirInfo (takeDirectory name) (takeFileName name)) [] []
+      readDirectory :: Name -> IO Directory
+      readDirectory currDirName = do
+        pathList <- (toAbsolute currDirName . skipDot . getDirectoryContents) currDirName
+        d <- readDirs pathList $ Directory (newDirInfo (takeDirectory currDirName) (takeFileName currDirName)) [] []
         readFiles pathList d
 
       readFiles :: [FilePath] -> Directory -> IO Directory
-      readFiles pathList (Directory name dirs _) =
+      readFiles pathList oldDir =
         let filePaths = filterM doesFileExist pathList
             files = (traverse mkFile =<< filePaths)
-            newDir = fmap (\filesList -> Directory name dirs filesList) files
+            newDir = fmap (Directory (dirInfo oldDir) (subDirs oldDir)) files
         in newDir
 
       readDirs :: [FilePath] -> Directory -> IO Directory
-      readDirs pathList (Directory name _ files) =
+      readDirs pathList oldDir =
         let dirPaths = filterM doesDirectoryExist pathList
             dirs = (traverse readDirectory =<< dirPaths)
-            newDir = fmap (\dirsList -> Directory name dirsList files) dirs
+            newDir = fmap (\dirsList -> Directory (dirInfo oldDir) dirsList (subFiles oldDir)) dirs
         in newDir
 
       skipDot :: IO [FilePath] -> IO [FilePath]
@@ -132,13 +138,13 @@ mkFile absolutePath = do
   fileSize <- getFileSize absolutePath
   filePermissions <- getPermissions absolutePath
   let info = Info { path = filePath, name = fileName, size = fileSize, perm = filePermissions}
-  File info <$> content <*> return [] <*> time
+  File info <$> fileContent <*> return [] <*> time
   where
     split :: FilePath -> (FilePath, FilePath)
     split p = (takeDirectory p, takeFileName p)
 
-    content :: IO String
-    content = readFile absolutePath
+    fileContent :: IO String
+    fileContent = readFile absolutePath
     
     time :: IO UTCTime
     time = getAccessTime absolutePath
