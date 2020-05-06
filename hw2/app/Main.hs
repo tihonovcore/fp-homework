@@ -2,6 +2,7 @@ module Main where
 
 import Lib
 import VCSCommands
+import VcsIO
 import DirectoryState
 import System.IO (hSetBuffering, stdout, BufferMode(..))
 import Data.Time.Clock (UTCTime)
@@ -16,8 +17,10 @@ main :: IO ()
 main = do
 --  startDir <- getLine       -- read dir. TODO: read as arg
   let startDir = testPath
-  directory <- readDirectoryState startDir
-  loop directory
+  ddd <- readDirectoryState startDir
+  -- TODO: remove absolute
+  vcs <- readVcsDirectory "/home/tihonovcore/fp-homework/hw2/vcs/testData"
+  loop $ mergeDirAndVcs ddd vcs
 
 loop :: Directory -> IO ()
 loop directory = do
@@ -30,6 +33,7 @@ loop directory = do
       loop newContent
     Nothing -> do
       writeDirectoryState directory
+      writeVcsState directory
       return ()
 
 data Command = Dir
@@ -52,6 +56,7 @@ data Command = Dir
              | Exit
              | Error
 
+-- TODO: make better
 getCommand :: IO Command
 getCommand = do
   line <- getLine
@@ -85,7 +90,7 @@ readNumber = do
 readStrategy :: IO MergeStrategy
 readStrategy = do
   line <- getLine
-  return $ if line == "l" 
+  return $ if line == "l"
            then MSLeft
            else if line == "r"
            then MSRight

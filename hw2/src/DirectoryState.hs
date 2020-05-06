@@ -63,6 +63,9 @@ getDirName (Directory (DirInfo ci _ _) _ _) = name ci
 getFullDirName :: Directory -> Name
 getFullDirName (Directory (DirInfo ci _ _) _ _) = fullName ci
 
+dirCommonInfo :: Directory -> CommonInfo
+dirCommonInfo (Directory (DirInfo ci _ _) _ _) = ci
+
 -- TODO: print DirInfo too
 render :: String -> Directory -> String
 render indent currDir =

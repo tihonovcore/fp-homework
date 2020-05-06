@@ -18,7 +18,7 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib, DirectoryState, Utils, VCSCommands
+  exposed-modules:     Lib, DirectoryState, Utils, VCSCommands, VcsIO
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
                      , mtl
