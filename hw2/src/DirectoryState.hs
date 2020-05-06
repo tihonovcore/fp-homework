@@ -8,7 +8,6 @@ import Data.Time
 import Utils
 import Debug.Trace (trace)
 import System.Directory (Permissions)
-import System.Directory.Internal (Permissions)
 
 data CommonInfo = Info
   { path :: String
@@ -66,7 +65,7 @@ getFullDirName (Directory (DirInfo ci _ _) _ _) = fullName ci
 dirCommonInfo :: Directory -> CommonInfo
 dirCommonInfo (Directory (DirInfo ci _ _) _ _) = ci
 
--- TODO: print DirInfo too
+-- TODO: make not recursive
 render :: String -> Directory -> String
 render indent currDir =
   let newIndent = indent ++ "| "

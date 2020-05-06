@@ -1,6 +1,7 @@
 import Lib
 import VCSCommands
 import DirectoryState
+import System.Directory (setPermissions, emptyPermissions, readable, writable)
 
 import Test.Hspec
 import Data.Time (getCurrentTime)
@@ -39,7 +40,7 @@ main = hspec $ do
       fmap dir (rm d "notReadMe") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| lala\n| anotherFile\n| close"--TODO rm time
     it "rmFile not found" $ do
       d <- startDirectory
-      fmap dir (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))  
+      fmap dir (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
     --TODO: rm file no perm
 --    it "rmNoPermitions" $ do
 --      d <- startDirectory
@@ -58,7 +59,7 @@ main = hspec $ do
   describe "showInfo" $ do
     it "file" $ do
       d <- startDirectory
-      showInfo d "notReadMe" `shouldBe` Right "How to test? Here's time.."
+      (unwords . init . lines <$> showInfo d "notReadMe") `shouldBe` Right "File \"notReadMe\" at /home/tihonovcore/fp-homework/hw2/testData File size: 28 Permissions {readable = True, writable = True, executable = False, searchable = False}"
 
     it "file not found" $ do
       d <- startDirectory
@@ -87,7 +88,6 @@ main = hspec $ do
   describe "append" $ do
     it "succ" $ do
       d <- startDirectory
-      --TODO use current time to check changes
       catr "notReadMe" (append d "notReadMe" "\nif u younger 18") `shouldBe` Right "lalala u've read! prokaznik\n\nif u younger 18"
     it "file not found" $ do
       d <- startDirectory
@@ -103,7 +103,7 @@ main = hspec $ do
     it "sub dir" $ do
       d <- startDirectory
       findFile d "NY" `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle/NY"
-    it "file not found" $ do  -- TODO: write perm before testing
+    it "file not found" $ do
       d <- startDirectory
       findFile d "NYNYA" `shouldBe` Left (ObjectNotFound "NYNYA")
 
@@ -115,7 +115,7 @@ main = hspec $ do
     it "check path & name" $ do
       d <- startDirectory
       time <- getCurrentTime
-      (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time) `shouldBe` Right "" -- TODO: how to test? here's currTime
+      (Right . unwords . init . lines =<< (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time)) `shouldBe` Right "File \"alka-lalka\" at /home/tihonovcore/fp-homework/hw2/testData File size: 0 Permissions {readable = True, writable = True, executable = False, searchable = False}"
     -- TODO: create in subdir (e.g. `touch /dogs/muha)
     it "file already exisits" $ do
       d <- startDirectory
@@ -272,8 +272,8 @@ main = hspec $ do
       let d1 = rewriteFile d0 "lala" "landasd"
       let d2 = add "lala" =<< d1
       let d3 = (\d -> rewriteFile d "lala" "londan") =<< d2
-      let d4 = (\d -> commit "lala" d) =<< d3
-      let result = (\d -> VCSCommands.log "lala" d) =<< d4
+      let d4 = commit "lala" =<< d3
+      let result = VCSCommands.log "lala" =<< d4
       result `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan"
 
     it "merge" $ do
@@ -282,7 +282,7 @@ main = hspec $ do
       let d1 = rewriteFile d0 "lala" "landasd"
       let d2 = add "lala" =<< d1
       let d3 = (\d -> rewriteFile d "lala" "londan") =<< d2
-      let d4 = (\d -> commit "lala" d) =<< d3
+      let d4 = commit "lala" =<< d3
       -- VCS default action end
 
       let left  = merge "lala" 1 2 MSLeft  =<< d4
@@ -291,11 +291,32 @@ main = hspec $ do
 
       let right  = merge "lala" 1 2 MSRight =<< d4
       let rightLog = VCSCommands.log "lala" =<< right
-      rightLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nlondand"
+      rightLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nlondan"
 
       let both  = merge "lala" 1 2 MSBoth  =<< d4
       let bothLog = VCSCommands.log "lala" =<< both
-      bothLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nl\na >>> o\nnda\ns >>> n\nd"
+      bothLog  `shouldBe` Right "\n### 1: \nlandasd\n### 2: \nlondan\n### 3: \nl\na >>> o\nnda\nsd >>> n\n"
+
+    it "merge: add/remove content" $ do
+      -- VCS default action begin
+      d0 <- startDirectory
+      let d1 = rewriteFile d0 "lala" "hello"
+      let d2 = add "lala" =<< d1
+      let d3 = (\d -> rewriteFile d "lala" "hello world") =<< d2
+      let d4 = commit "lala" =<< d3
+      -- VCS default action end
+
+      let left  = merge "lala" 1 2 MSLeft  =<< d4
+      let leftLog = VCSCommands.log "lala" =<< left
+      leftLog `shouldBe` Right "\n### 1: \nhello\n### 2: \nhello world\n### 3: \nhello world"
+
+      let right  = merge "lala" 1 2 MSRight =<< d4
+      let rightLog = VCSCommands.log "lala" =<< right
+      rightLog  `shouldBe` Right "\n### 1: \nhello\n### 2: \nhello world\n### 3: \nhello world"
+
+      let both  = merge "lala" 1 2 MSBoth  =<< d4
+      let bothLog = VCSCommands.log "lala" =<< both
+      bothLog  `shouldBe` Right "\n### 1: \nhello\n### 2: \nhello world\n### 3: \nhello world"
 
 -- TODO: init ??
 -- TODO: history

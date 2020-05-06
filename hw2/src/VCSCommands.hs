@@ -41,9 +41,9 @@ log expectedName (Directory _ _ files) = logRender <$> getRevisions files
       where
         renderRev :: Int -> Data -> Data
         renderRev n cont = "### " ++ show n ++ ": \n" ++ cont
-    
+
     fileInVcs :: File -> Bool
-    fileInVcs = not . null . revisions 
+    fileInVcs = not . null . revisions
 
 -- TODO: !null revs
 -- TODO: comment
@@ -103,9 +103,6 @@ rmFileFromVcs expectedName (Directory di dirs files) = Directory di dirs <$> rem
       else (:) file <$> removeFile xs
 
 data MergeStrategy = MSLeft | MSRight | MSBoth | MSInteractive
--- TODO: First -> Second is wrong change
--- Right one is [First] -> [Second]
--- ex. mergs landasd londan Right is `londa[s]n`, but expected `londa[]n` 
 merge :: Name -> Int -> Int -> MergeStrategy -> Directory -> OpMonad Directory
 merge expectedName first second strategy (Directory di dirs files) = Directory di dirs <$> fileHandler files
   where
@@ -126,25 +123,66 @@ merge expectedName first second strategy (Directory di dirs files) = Directory d
       return $ mergeResult : reverse revs
 
     getRev :: [(Int, Data)] -> Int -> OpMonad Data
-    getRev [] _ = throwError $ WrongRevisionIndex "???"
+    getRev [] _ = throwError $ WrongRevisionIndex expectedName
     getRev ((currIndex, rev) : xs) n =
       if currIndex == n
       then return rev
       else getRev xs n
     
     mergeRevs :: Data -> Data -> OpMonad Data
-    mergeRevs l r = return $ mergeInternal $ getDiff l r
+    mergeRevs l r = return $ mergeInternal $ joinDiff $ getDiff l r
       where
-        mergeInternal :: [Diff Char] -> Data
+        mergeInternal :: [Diff String] -> Data
         mergeInternal [] = ""
-        mergeInternal (First f : Second s : other) = 
-          case strategy of 
-            MSLeft -> f : mergeInternal other
-            MSRight -> s : mergeInternal other
-            MSBoth -> "\n" ++ [f] ++ " >>> " ++ [s] ++ "\n" ++ mergeInternal other
+        mergeInternal (First f : Second s : other) =
+          case strategy of
+            MSLeft  -> f ++ mergeInternal other
+            MSRight -> s ++ mergeInternal other
+            MSBoth  -> "\n" ++ f ++ " >>> " ++ s ++ "\n" ++ mergeInternal other
             MSInteractive -> error "interactive mode not support"
-        mergeInternal (First f : other) = f : mergeInternal other
-        mergeInternal (Second s : other) = s : mergeInternal other
-        mergeInternal (Both a _ : other) = a : mergeInternal other
+        mergeInternal (First f : other) = f ++ mergeInternal other
+        mergeInternal (Second s : other) = s ++ mergeInternal other
+        mergeInternal (Both a _ : other) = a ++ mergeInternal other
+
+        joinDiff :: [Diff Char] -> [Diff String]
+        joinDiff [] = []
+        joinDiff list@(x : _) =
+          case x of
+            First _ -> let (newFirst, other) = span isFirst list in joinFirst newFirst : joinDiff other
+            Second _ -> let (newFirst, other) = span isSecond list in joinSecond newFirst : joinDiff other
+            Both _ _ -> let (newFirst, other) = span isBoth list in joinBoth newFirst : joinDiff other
+          where
+            joinFirst :: [Diff Char] -> Diff String
+            joinFirst [] = First ""
+            joinFirst (First letter : other) = case joinFirst other of 
+                                            First s -> First $ letter : s
+                                            _       -> error "internal error"
+            joinFirst _ = error "internal error"
+            
+            joinSecond :: [Diff Char] -> Diff String
+            joinSecond [] = Second ""
+            joinSecond (Second letter : other) = case joinSecond other of 
+                                            Second s -> Second $ letter : s
+                                            _       -> error "internal error"
+            joinSecond _ = error "internal error"
+            
+            joinBoth :: [Diff Char] -> Diff String
+            joinBoth [] = Both "" ""
+            joinBoth (Both letter _ : other) = case joinBoth other of 
+                                                 Both s _ -> Both (letter : s) ""
+                                                 _       -> error "internal error"
+            joinBoth _ = error "internal error"
+            
+            isFirst :: Diff a -> Bool
+            isFirst (First _) = True
+            isFirst _         = False
+
+            isSecond :: Diff a -> Bool
+            isSecond (Second _) = True
+            isSecond _         = False
+
+            isBoth :: Diff a -> Bool
+            isBoth (Both _ _) = True
+            isBoth _         = False
 -- TODO: init
 -- TODO: history
