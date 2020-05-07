@@ -72,10 +72,11 @@ mkdir curr@(Directory currInfo dirs files) newDirName
 
 -- |Nothing if file exists
 touch :: Directory -> String -> UTCTime -> OpMonad Directory
-touch (Directory info dirs files) newFileName time
+touch directory@(Directory info dirs files) newFileName time
+  | isNotWritable directory   = throwError NoPermissions
   | fileAlreadyExistsIn files = throwError $ FileAlreadyExists newFileName
-  | dirAlreadyExistsIn dirs   = throwError $ DirAlreadyExists  newFileName
-  | otherwise                 = return $ Directory info dirs newFiles
+  | dirAlreadyExistsIn  dirs  = throwError $ DirAlreadyExists  newFileName
+  | otherwise                 = return $ directory { subFiles = newFiles }
     where
       fileAlreadyExistsIn :: [File] -> Bool
       fileAlreadyExistsIn = foldr (\f -> (||) (getFileName f == newFileName)) False
@@ -87,6 +88,9 @@ touch (Directory info dirs files) newFileName time
       newFiles = 
         let newPath = case info of (DirInfo ci _ _) -> fullName ci in
         File (emptyInfo newPath newFileName) "" [] time : files
+
+      isNotWritable :: Directory -> Bool
+      isNotWritable = not . writable . perm . dirCommonInfo
 
 dir :: Directory -> String
 dir = show
@@ -130,7 +134,9 @@ rm (Directory i dirs files) expectedName =
     rmDir _ [] = throwError $ DirNotFound expectedName
     rmDir pref (x : xs) =
       if getDirName x == expectedName
-      then return $ pref ++ xs -- TODO: check permissions
+      then if getDirName x == ".." || (not . writable . perm . dirCommonInfo) x
+           then throwError NoPermissions
+           else return $ pref ++ xs
       else rmDir (x : pref) xs
     
     rmFile :: [File] -> [File] -> OpMonad [File]
@@ -160,12 +166,12 @@ rewriteFile (Directory i d files) expectedName newContent =
   where
     write :: [File] -> OpMonad [File]
     write [] = throwError $ FileNotFound expectedName
-    write (x@(File info _ revs time) : xs) =
-      if getFileName x == expectedName
-      then if isWritableFile x
-           then return $ File info newContent revs time : xs
+    write (file : other) =
+      if getFileName file == expectedName
+      then if isWritableFile file
+           then return $ file { content = newContent } : other
            else throwError NoPermissions
-      else fmap ((:) x) (write xs)
+      else fmap ((:) file) (write other)
 
 -- TODO: change file size
 append :: Directory -> Name -> Data -> OpMonad Directory
@@ -174,22 +180,22 @@ append (Directory i d files) expectedName newContent =
   where
     add :: [File] -> OpMonad [File]
     add [] = throwError $ FileNotFound expectedName
-    add (x@(File info oldContent revs time) : xs) =
-      if getFileName x == expectedName
-      then if isWritableFile x 
-           then return $ File info (oldContent ++ newContent) revs time : xs
+    add (file : other) =
+      if getFileName file == expectedName
+      then if isWritableFile file
+           then return $ file { content = content file ++ newContent } : other
            else throwError NoPermissions
-      else fmap ((:) x) (add xs)
+      else fmap ((:) file) (add other)
 
 findFile :: Directory -> Name -> OpMonad Data
 findFile (Directory _ dirs files) expectedName = searchInFiles files `opOr` searchInDirs dirs
   where
     searchInFiles :: [File] -> OpMonad Data
     searchInFiles [] = throwError $ ObjectNotFound expectedName
-    searchInFiles (x : xs) =
-      if getFileName x == expectedName
-      then return $ getFullFileName x
-      else searchInFiles xs
+    searchInFiles (file : other) =
+      if getFileName file == expectedName
+      then return $ getFullFileName file
+      else searchInFiles other
 
     searchInDirs :: [Directory] -> OpMonad Data
     searchInDirs [] = throwError $ ObjectNotFound expectedName

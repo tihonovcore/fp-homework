@@ -7,15 +7,20 @@ import Data.Algorithm.Diff
 
 -- TODO: add dir
 add :: Name -> Directory -> OpMonad Directory
-add expectedName (Directory di dirs files) = do
-  newFiles <- mapFileIfExists files
-  return $ Directory di dirs newFiles
+add expectedName (Directory di dirs files) = 
+  if expectedName == ".." 
+  then throwError NoPermissions
+  else do
+    newFiles <- mapFileIfExists files
+    return $ Directory di dirs newFiles
   where
     mapFileIfExists :: [File] -> OpMonad [File]
     mapFileIfExists [] = throwError $ FileNotFound expectedName
     mapFileIfExists (file : xs) =
       if getFileName file == expectedName
-      then return $ addContent file : xs
+      then if isReadableFile file
+           then return $ addContent file : xs
+           else throwError NoPermissions
       else (\list -> return $ file : list) =<< mapFileIfExists xs
 
     addContent :: File -> File
@@ -45,7 +50,6 @@ log expectedName (Directory _ _ files) = logRender <$> getRevisions files
     fileInVcs :: File -> Bool
     fileInVcs = not . null . revisions
 
--- TODO: !null revs
 -- TODO: comment
 commit :: Name -> Directory -> OpMonad Directory
 commit expectedName (Directory di dirs files) = Directory di dirs <$> commitFile files
@@ -54,7 +58,11 @@ commit expectedName (Directory di dirs files) = Directory di dirs <$> commitFile
     commitFile [] = throwError $ FileNotFound expectedName
     commitFile (file : xs) =
       if getFileName file == expectedName
-      then return $ commitedFile file : xs
+      then if null $ revisions file
+           then throwError $ FileNotInVcs expectedName
+           else if isReadableFile file
+           then return $ commitedFile file : xs
+           else throwError NoPermissions
       else (:) file <$> commitFile xs
 
     commitedFile :: File -> File
@@ -184,5 +192,3 @@ merge expectedName first second strategy (Directory di dirs files) = Directory d
             isBoth :: Diff a -> Bool
             isBoth (Both _ _) = True
             isBoth _         = False
--- TODO: init
--- TODO: history

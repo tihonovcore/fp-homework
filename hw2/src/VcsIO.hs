@@ -3,7 +3,7 @@ module VcsIO where
 import DirectoryState
 import System.Directory (doesDirectoryExist, getDirectoryContents, createDirectory, doesFileExist)
 import System.FilePath (joinPath, takeDirectory, takeFileName, makeRelative)
-import Data.List (isPrefixOf, union)
+import Data.List (isPrefixOf, union, sortBy)
 import Control.Monad (filterM)
 import Data.Either (lefts, rights)
 import Data.Time (UTCTime(..))
@@ -32,11 +32,19 @@ readVcsDirectory vcsDirPath = upRevisions <$> readDirectoryState vcsDirPath
         Directory (dirInfo dir) (lefts fileDirList) (rights fileDirList)
 
     action :: Directory -> Either Directory File
-    action dir | null (subDirs dir) && (not . null $ subFiles dir) = Right $ mkFileWithRevisions (getFullDirName dir) (map content (skipZero $reverse $ subFiles dir))
-               | otherwise = Left $ upRevisions dir
+    action dir = 
+      if isFile dir
+      then Right $ mkFileWithRevisions (getFullDirName dir) (map content (skipZero $ sortByIndex $ subFiles dir))
+      else Left $ upRevisions dir
       where
         skipZero :: [File] -> [File]
         skipZero = filter (\f -> getFileName f /= "0" || (length (content f) `seq` False))
+        
+        isFile :: Directory -> Bool
+        isFile directory = null (subDirs directory) && (not . null $ subFiles directory)
+        
+        sortByIndex :: [File] -> [File]
+        sortByIndex = sortBy (\l r -> compare (getFileName l) (getFileName r))
 
     mkFileWithRevisions :: FilePath -> [Data] -> File
     mkFileWithRevisions filePath revs =
@@ -123,7 +131,7 @@ writeVcsState currDir = makeVcsDir >> writeDir currDir
       
       let zeroCommit = ""
       mkDirIfAbsent pathToCurrFile
-      writeRevisions pathToCurrFile (zeroCommit : reverse (revisions file)) 0
+      writeRevisions pathToCurrFile (zeroCommit : revisions file) 0
 
     writeRevisions :: FilePath -> [Data] -> Int -> IO ()
     writeRevisions _ [] _ = return ()
