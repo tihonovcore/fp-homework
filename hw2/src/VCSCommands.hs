@@ -168,7 +168,7 @@ merge expectedName first second strategy (Directory di dirs files) = Directory d
             
             joinBoth :: [Diff Char] -> Diff String
             joinBoth [] = Both "" ""
-            joinBoth (Both letter _ : other) = case joinBoth other of 
+            joinBoth (Both letter _ : other) = case joinBoth other of
                                                  Both s _ -> Both (letter : s) ""
                                                  _       -> error "internal error"
             joinBoth _ = error "internal error"

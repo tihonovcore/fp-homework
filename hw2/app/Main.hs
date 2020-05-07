@@ -8,6 +8,7 @@ import System.IO (hSetBuffering, stdout, BufferMode(..))
 import Data.Time.Clock (UTCTime)
 import Data.Time (getCurrentTime)
 import Numeric (readDec)
+import System.FilePath (takeDirectory, takeFileName, splitDirectories, joinPath)
 
 testPath :: String
 --testPath = "/home/tihonovcore/testHaskellCL"
@@ -32,9 +33,16 @@ loop directory = do
       showResult result
       loop newContent
     Nothing -> do
-      writeDirectoryState directory
-      writeVcsState directory
+      let liftedDirectory = liftDirectory directory
+      writeDirectoryState liftedDirectory
+      writeVcsState liftedDirectory
       return ()
+
+liftDirectory :: Directory -> Directory
+liftDirectory directory = 
+  case cd directory ".." of
+    Left  _ -> directory
+    Right r -> liftDirectory r
 
 data Command = Dir
              | MkDir  Name
@@ -98,38 +106,70 @@ readStrategy = do
            then MSBoth
            else MSInteractive
 
--- TODO: work with vcs
 evalCommand :: Command -> Directory -> Maybe (String, Directory)
 evalCommand c d = match c
   where
     match :: Command -> Maybe (String, Directory)
     match Dir                      = Just (dir d, d)
-    match (MkDir  dirName)         = handleDir  $ mkdir d dirName
-    match (Cd     dirName)         = handleDir  $ cd    d dirName
-    match (Rm     objName)         = handleDir  $ rm    d objName
-    match (Cat   fileName)         = handleData $ cat   d fileName
-    match (Main.Info objName)      = handleData $ showInfo d objName
-    match (Find  fileName)         = handleData $ findFile d fileName
-    match (Touch fileName time)    = handleDir  $ touch d fileName time
-    match (Write  fileName input)  = handleDir  $ rewriteFile d fileName input
-    match (Append fileName input)  = handleDir  $ append   d fileName input
-    match (VCSLog fileName)                       = handleData $ VCSCommands.log fileName d
-    match (VCSCommit fileName)                    = handleDir  $ commit          fileName d
-    match (VCSAdd    fileName)                    = handleDir  $ VCSCommands.add fileName d
-    match (VCSRmFile fileName)                    = handleDir  $ rmFileFromVcs   fileName d
-    match (VCSRevision   fileName index)          = handleData $ showRevision    fileName index d
-    match (VCSRmRevision fileName index)          = handleDir  $ removeRevision  fileName index d
-    match (VCSMerge fileName left right strategy) = handleDir  $ merge           fileName left right strategy d
+    match (MkDir  dirName)         = handleDir mkdir dirName
+    match (Cd     dirName)         = handleCd dirName
+    match (Rm     objName)         = handleDir  rm  objName
+    match (Cat   fileName)         = handleData cat fileName  --   d fileName
+    match (Main.Info objName)      = handleData showInfo objName
+    match (Find  fileName)         = handleData findFile fileName
+    match (Touch fileName time)    = handleDir  (swap312 touch time) fileName
+    match (Write  fileName input)  = handleDir  (swap312 rewriteFile input) fileName
+    match (Append fileName input)  = handleDir  (swap312 append input) fileName
+    match (VCSLog fileName)                       = handleData (flip VCSCommands.log) fileName
+    match (VCSCommit fileName)                    = handleDir (flip commit)          fileName
+    match (VCSAdd    fileName)                    = handleDir (flip VCSCommands.add) fileName
+    match (VCSRmFile fileName)                    = handleDir  (flip rmFileFromVcs)   fileName
+    match (VCSRevision   fileName index)          = handleData (swap231 showRevision   index)      fileName
+    match (VCSRmRevision fileName index)          = handleDir  (swap231 removeRevision index)      fileName
+    match (VCSMerge fileName left right strategy) = handleDir  (swap23451 merge left right strategy) fileName
     match Exit                     = Nothing
     match _                        = Just ("Unexpected input", d)
+    
+    handleCd :: FilePath -> Maybe (String, Directory)
+    handleCd filePath = 
+      case multiCd filePath d of
+        (Left     err) -> Just (show err, d)
+        (Right newDir) -> Just ("",  newDir)
+    
+    swap231 :: (a -> b -> c -> d) -> (b -> c -> a -> d)
+    swap231 f = \b c' a -> f a b c'
+    
+    swap312 :: (a -> b -> c -> d) -> (c -> a -> b -> d)
+    swap312 f = \c' a b -> f a b c'
+    
+    swap23451 :: (a -> b -> c -> d -> e -> f) -> (b -> c -> d -> e -> a -> f)
+    swap23451 f b c' d' e a = f a b c' d' e
 
-    handleDir :: OpMonad Directory -> Maybe (String, Directory)
-    handleDir (Left     err) = Just (show err, d)
-    handleDir (Right newDir) = Just ("",  newDir)
+    handleData :: (Directory -> FilePath -> OpMonad Data) -> FilePath -> Maybe (String, Directory)
+    handleData action longPath =
+      case flip action (takeFileName longPath) =<< multiCd (takeDirectory longPath) d of
+        (Left    err) -> Just (show err, d)
+        (Right input) -> Just (input,    d)
 
-    handleData :: OpMonad Data -> Maybe (String, Directory)
-    handleData (Left    err) = Just (show err, d)
-    handleData (Right input) = Just (input,    d)
+    handleDir :: (Directory -> FilePath -> OpMonad Directory) -> FilePath -> Maybe (String, Directory)
+    handleDir action longPath =
+      case up =<< flip action (takeFileName longPath) =<< multiCd (takeDirectory longPath) d of
+        (Left     err) -> Just (show err, d)
+        (Right newDir) -> Just ("",  newDir)
+        where
+          up :: Directory -> OpMonad Directory
+          up currDir =
+            let upSteps = map (const "..") $ tail $ splitDirectories (takeDirectory longPath) in
+            multiCd (joinPath upSteps) currDir
+
+
+--    handleDir :: OpMonad Directory -> Maybe (String, Directory)
+--    handleDir (Left     err) = Just (show err, d)
+--    handleDir (Right newDir) = Just ("",  newDir)
+--
+--    handleData :: OpMonad Data -> Maybe (String, Directory)
+--    handleData (Left    err) = Just (show err, d)
+--    handleData (Right input) = Just (input,    d)
 
 showResult :: String -> IO ()
 showResult = putStrLn

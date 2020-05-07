@@ -64,7 +64,11 @@ main = hspec $ do
     it "file not found" $ do
       d <- startDirectory
       showInfo d "nonExisistsdfs" `shouldBe` Left (FileNotFound "nonExisistsdfs")
-   --TODO
+    
+--    it "file in subdir" $ do
+--      d <- startDirectory
+--      (unwords . init . lines <$> showInfo d "cats/meow") `shouldBe` Right ""
+   --TODO: work with dir
 --    it "dir" $ do
 --      d <- startDirectory
 --      showInfo d "nonExisistsdfs" `shouldBe` Nothing
@@ -72,12 +76,15 @@ main = hspec $ do
 --    it "dir not found" $ do
 --      d <- startDirectory
 --      showInfo d "nonExisistsdfs" `shouldBe` Nothing
+   -- TODO: showInfo of subdir
 
   describe "rewriteFile" $ do
     it "succ" $ do
       d <- startDirectory
-      --TODO use current time to check changes
       catr "notReadMe" (rewriteFile d "notReadMe" "oh, STOP READING") `shouldBe` Right "oh, STOP READING"
+--    it "file in subDir" $ do
+--      d <- startDirectory
+--      catr "elleFunning/elle/NY" (rewriteFile d "elleFunning/elle/NY" "haha, works!") `shouldBe` Right "haha, works!"
     it "file not found" $ do
       d <- startDirectory
       catr "nonExisistsdfs" (rewriteFile d "nonExisistsdfs" "lalalalal") `shouldBe` Left (FileNotFound "nonExisistsdfs")
@@ -89,6 +96,9 @@ main = hspec $ do
     it "succ" $ do
       d <- startDirectory
       catr "notReadMe" (append d "notReadMe" "\nif u younger 18") `shouldBe` Right "lalala u've read! prokaznik\n\nif u younger 18"
+--    it "file in subDir" $ do
+--      d <- startDirectory
+--      catr "elleFunning/elle/NY" (append d "elleFunning/elle/NY" "APPEND") `shouldBe` Right "todo"  
     it "file not found" $ do
       d <- startDirectory
       catr "nonExisistsdfs" (append d "nonExisistsdfs" "yeah") `shouldBe` Left (FileNotFound "nonExisistsdfs")
@@ -116,7 +126,10 @@ main = hspec $ do
       d <- startDirectory
       time <- getCurrentTime
       (Right . unwords . init . lines =<< (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time)) `shouldBe` Right "File \"alka-lalka\" at /home/tihonovcore/fp-homework/hw2/testData File size: 0 Permissions {readable = True, writable = True, executable = False, searchable = False}"
-    -- TODO: create in subdir (e.g. `touch /dogs/muha)
+--    it "create file in subdir" $ do
+--      d <- startDirectory
+--      time <- getCurrentTime
+--      dirr (touch d "dogs/atata" time) `shouldBe` Right "todo"
     it "file already exisits" $ do
       d <- startDirectory
       time <- getCurrentTime
@@ -135,7 +148,9 @@ main = hspec $ do
       let d1 = cd d0 "elleFunning"
       let res = (\d -> cd d "..") =<< d1
       dirr res `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| anotherFile\n| lala\n| notReadMe\n| close"
-    -- TODO: cd to subdir (e.g. `cd /dogs/cuteDogs)
+--    it "cd to subsubdir" $ do
+--        d <- startDirectory
+--        dirr (cd d "elleFunning/elle") `shouldBe` Right "todo"
     it "dir not found" $ do
       d <- startDirectory
       dirr (cd d "dooogs") `shouldBe` Left (DirNotFound "dooogs")
@@ -144,7 +159,9 @@ main = hspec $ do
     it "success" $ do
       d <- startDirectory
       dirr (mkdir d "trees") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/trees\n\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| anotherFile\n| lala\n| notReadMe\n| close"
-    -- TODO: cd to subdir (e.g. `cd /dogs/cuteDogs)
+--    it "mkdir in subDir" $ do
+--      d <- startDirectory
+--      dirr (mkdir d "cat/cuteCats") `shouldBe` Right "todo"
     it "dir already Exists" $ do
       d <- startDirectory
       dirr (mkdir d "cats") `shouldBe` Left (DirAlreadyExists "cats")
@@ -156,6 +173,12 @@ main = hspec $ do
       let d2 = add "lala" =<< d1
       let d3 = VCSCommands.log "lala" =<< d2
       d3 `shouldBe` Right "\n### 1: \ntest331"
+--    it "add: ok, log: ok. work with subdirectory" $ do
+--      d0 <- startDirectory
+--      let d1 = rewriteFile d0 "dogs/woof" "p'osikki"
+--      let d2 = add "dogs/woof" =<< d1
+--      let d3 = VCSCommands.log "dogs/woof" =<< d2
+--      d3 `shouldBe` Right "todo"
     it "add: fail, log: ok" $ do
       d0 <- startDirectory
       let d1 = add "banditka" d0
@@ -182,15 +205,18 @@ main = hspec $ do
       d2 `shouldBe` Left (FileNotFound "whatHappendWithTheSubmarine")
     it "file not in vcs" $ do
       d0 <- startDirectory
-      let d1 = commit "onaUtanula" d0
-      let d2 = VCSCommands.log "onaUtanula" =<< d1
-      d2 `shouldBe` Left (FileNotFound "onaUtanula") --TODO: FileNotInVcsError
-      --TODO: file in subdir
---    it "file in sub directory" $ do
+      let d1 = commit "notReadMe" d0
+      let d2 = VCSCommands.log "notReadMe" =<< d1
+      d2 `shouldBe` Left (FileNotInVcs "notReadMe")
+--    it "commint file from subdir" $ do
 --      d0 <- startDirectory
---      let d1 = commit "whatHappendWithTheSubmarine" d0
---      let d2 = VCSCommands.log "lala" =<< d1
---      d2 `shouldBe` Left (FileNotFound "whatHappendWithTheSubmarine")
+--      let file = "dogs/woof"
+--      let d1 = rewriteFile d0 file "woof woof"
+--      let d2 = add file =<< d1
+--      let d3 = (\d -> append d file " mtfk") =<< d2
+--      let d4 = commit file =<< d3
+--      let d5 = VCSCommands.log file =<< d4
+--      d5 `shouldBe` Right "todo"
 
   describe "remove file from vcs" $ do
     it "success" $ do
@@ -211,16 +237,16 @@ main = hspec $ do
       let d5 = rmFileFromVcs "europe" =<< d4
       let d6 = VCSCommands.log "europe" =<< d5
       d6 `shouldBe` Left (FileNotFound "europe")
-      --TODO: file in subdir
 --    it "file in subdir" $ do
 --      d0 <- startDirectory
---      let d1 = rewriteFile d0 "lala" "дурсли не любили гарри, потому что он крестраж и они более уязвимы к магии, чем его друзья"
---      let d2 = add "lala" =<< d1
---      let d3 = (\d -> append d "lala" "\nого! вот так теория") =<< d2
---      let d4 = commit "lala" =<< d3
---      let d5 = rmFileFromVcs "lala" =<< d4
---      let d6 = VCSCommands.log "lala" =<< d5
---      d6 `shouldBe` Left (FileNotFound "")
+--      let file = "dogs/woof"
+--      let d1 = rewriteFile d0 file "sobakens"
+--      let d2 = add file =<< d1
+--      let d3 = (\d -> append d file ", ur cute") =<< d2
+--      let d4 = commit file =<< d3
+--      let d5 = rmFileFromVcs file =<< d4
+--      let d6 = VCSCommands.log file =<< d5
+--      d6 `shouldBe` Right "todo"
 
   describe "show revisions" $ do
     it "success" $ do
@@ -255,16 +281,15 @@ main = hspec $ do
       let d4 = commit "anotherFile" =<< d3
       let d5 = showRevision "anotherFile" (-133) =<< d4
       d5 `shouldBe` Left (WrongRevisionIndex "anotherFile")
-      --TODO: file in subdir
 --    it "file in subdir" $ do
 --      d0 <- startDirectory
---      let d1 = rewriteFile d0 "lala" "дурсли не любили гарри, потому что он крестраж и они более уязвимы к магии, чем его друзья"
---      let d2 = add "lala" =<< d1
---      let d3 = (\d -> append d "lala" "\nого! вот так теория") =<< d2
---      let d4 = commit "lala" =<< d3
---      let d5 = rmFileFromVcs "lala" =<< d4
---      let d6 = VCSCommands.log "lala" =<< d5
---      d6 `shouldBe` Left (FileNotFound "")
+--      let file = "cats/meow"
+--      let d1 = rewriteFile d0 file "S-cala"
+--      let d2 = add file =<< d1
+--      let d3 = (\d -> append d file "S-uicide") =<< d2
+--      let d4 = commit file =<< d3
+--      let d5 = showRevision file (-133) =<< d4
+--      d5 `shouldBe` Right "todo"
 
   describe "vcs composition" $ do
     it "add -> rewrite -> commit -> log" $ do

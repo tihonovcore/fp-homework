@@ -5,7 +5,10 @@ import DirectoryState
 import Data.Time.Clock (UTCTime)
 import Control.Applicative ((<|>))
 import Control.Monad.Except (throwError)
-import System.Directory (readable, writable)--import Debug.Trace (trace)
+import System.Directory (readable, writable)
+import System.FilePath (splitPath, splitDirectories)
+import Control.Monad (foldM)--import Debug.Trace (trace)
+import Utils
 
 -- |Nothing if dir not found
 -- 
@@ -18,7 +21,7 @@ import System.Directory (readable, writable)--import Debug.Trace (trace)
 -- delete `..` from `v`'s directories
 -- rename `..` to `u`
 -- add `v` to `u`'s directories
-cd :: Directory -> String -> OpMonad Directory
+cd :: Directory -> Name -> OpMonad Directory
 cd (Directory info dirs files) expectedName = do
   (v, other) <- rmDir dirs
   let u = Directory info other files
@@ -76,7 +79,7 @@ touch (Directory info dirs files) newFileName time
     where
       fileAlreadyExistsIn :: [File] -> Bool
       fileAlreadyExistsIn = foldr (\f -> (||) (getFileName f == newFileName)) False
-      
+
       dirAlreadyExistsIn :: [Directory] -> Bool
       dirAlreadyExistsIn = foldr (\f -> (||) (getDirName f == newFileName)) False
 
@@ -195,3 +198,6 @@ findFile (Directory _ dirs files) expectedName = searchInFiles files `opOr` sear
     opOr :: OpMonad Data -> OpMonad Data -> OpMonad Data
     opOr (Left _) r = r
     opOr success  _ = success 
+
+multiCd :: FilePath -> Directory -> OpMonad Directory
+multiCd longPath directory = foldM cd directory $ filter (\n -> n /= ".") $ splitDirectories longPath

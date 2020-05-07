@@ -36,7 +36,7 @@ readVcsDirectory vcsDirPath = upRevisions <$> readDirectoryState vcsDirPath
                | otherwise = Left $ upRevisions dir
       where
         skipZero :: [File] -> [File]
-        skipZero = filter (\f -> getFileName f /= "0")
+        skipZero = filter (\f -> getFileName f /= "0" || (length (content f) `seq` False))
 
     mkFileWithRevisions :: FilePath -> [Data] -> File
     mkFileWithRevisions filePath revs =
@@ -119,6 +119,8 @@ writeVcsState currDir = makeVcsDir >> writeDir currDir
     writeVcsFile :: File -> IO ()
     writeVcsFile file = do
       let pathToCurrFile = toVcsPath (getFullFileName file)
+      if 10 == foldr ((+) . length) 0 (revisions file) then return () else return ()
+      
       let zeroCommit = ""
       mkDirIfAbsent pathToCurrFile
       writeRevisions pathToCurrFile (zeroCommit : reverse (revisions file)) 0
