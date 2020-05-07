@@ -1,13 +1,19 @@
 import Lib
 import VCSCommands
 import DirectoryState
-import System.Directory (setPermissions, emptyPermissions, readable, writable)
+import System.Directory (setPermissions, emptyPermissions, readable, writable, getCurrentDirectory)
 
 import Test.Hspec
 import Data.Time (getCurrentTime)
+import System.FilePath (joinPath)
+
+currDir :: IO String
+currDir = do
+  filePath <- getCurrentDirectory
+  return $ joinPath [filePath, "testData"]
 
 startDirectory :: IO Directory
-startDirectory = readDirectoryState "/home/tihonovcore/fp-homework/hw2/testData"
+startDirectory = readDirectoryState =<< currDir
 
 catr :: Name -> OpMonad Directory -> OpMonad Data
 catr name' = (=<<) (`cat` name')
@@ -20,7 +26,7 @@ main = hspec $ do
   describe "dir" $
     it "dir" $ do
       d <- startDirectory
-      dir d `shouldBe` "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| anotherFile\n| lala\n| notReadMe\n| close" --TODO rm time
+      dir d `shouldBe` "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
 
   describe "cat" $ do
     it "cat" $ do
@@ -37,7 +43,7 @@ main = hspec $ do
   describe "rm" $ do
     it "rmFile" $ do
       d <- startDirectory
-      fmap dir (rm d "notReadMe") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| lala\n| anotherFile\n| close"--TODO rm time
+      fmap dir (rm d "notReadMe") `shouldBe` Right "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 lala\n\9500\9472 anotherFile\n\9492\9472 close"
     it "rmFile not found" $ do
       d <- startDirectory
       fmap dir (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
@@ -47,7 +53,7 @@ main = hspec $ do
 --      fmap dir (rm d "notReadMe") `shouldBe` Right ""
     it "rmDir" $ do
       d <- startDirectory
-      fmap dir (rm d "cats") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| anotherFile\n| lala\n| notReadMe\n| close"
+      fmap dir (rm d "cats") `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
     it "rmDir not found" $ do
       d <- startDirectory
       fmap dir (rm d "narwhals") `shouldBe` Left (Seq (FileNotFound "narwhals") (DirNotFound "narwhals"))
@@ -59,11 +65,12 @@ main = hspec $ do
   describe "showInfo" $ do
     it "file" $ do
       d <- startDirectory
-      (unwords . init . lines <$> showInfo d "notReadMe") `shouldBe` Right "File \"notReadMe\" at /home/tihonovcore/fp-homework/hw2/testData File size: 28 Permissions {readable = True, writable = True, executable = False, searchable = False}"
+      currDirPath <- currDir
+      (unwords . init . lines <$> showInfo d "notReadMe") `shouldBe` Right ("Object \"notReadMe\" at " ++ currDirPath ++ " Size: 28 Permissions {readable = True, writable = True, executable = False, searchable = False}")
 
     it "file not found" $ do
       d <- startDirectory
-      showInfo d "nonExisistsdfs" `shouldBe` Left (FileNotFound "nonExisistsdfs")
+      showInfo d "nonExisistsdfs" `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
     
 --    it "file in subdir" $ do
 --      d <- startDirectory
@@ -98,7 +105,7 @@ main = hspec $ do
       catr "notReadMe" (append d "notReadMe" "\nif u younger 18") `shouldBe` Right "lalala u've read! prokaznik\n\nif u younger 18"
 --    it "file in subDir" $ do
 --      d <- startDirectory
---      catr "elleFunning/elle/NY" (append d "elleFunning/elle/NY" "APPEND") `shouldBe` Right "todo"  
+--      catr "elleFunning/elle/NY" (append d "elleFunning/elle/NY" "APPEND") `shouldBe` Right "todo"
     it "file not found" $ do
       d <- startDirectory
       catr "nonExisistsdfs" (append d "nonExisistsdfs" "yeah") `shouldBe` Left (FileNotFound "nonExisistsdfs")
@@ -109,10 +116,12 @@ main = hspec $ do
   describe "findFile" $ do
     it "this dir" $ do
       d <- startDirectory
-      findFile d "close" `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData/close"
+      currDirPath <- currDir
+      findFile d "close" `shouldBe` Right (joinPath [currDirPath, "close"])
     it "sub dir" $ do
       d <- startDirectory
-      findFile d "NY" `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle/NY"
+      currDirPath <- currDir
+      findFile d "NY" `shouldBe` Right (joinPath [currDirPath, "elleFunning/elle/NY"])
     it "file not found" $ do
       d <- startDirectory
       findFile d "NYNYA" `shouldBe` Left (ObjectNotFound "NYNYA")
@@ -121,11 +130,13 @@ main = hspec $ do
     it "create file" $ do
       d <- startDirectory
       time <- getCurrentTime
-      dirr (touch d "alka-lalka" time) `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| alka-lalka\n| anotherFile\n| lala\n| notReadMe\n| close"
+      dirr (touch d "alka-lalka" time) `shouldBe` Right "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 alka-lalka\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
     it "check path & name" $ do
       d <- startDirectory
       time <- getCurrentTime
-      (Right . unwords . init . lines =<< (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time)) `shouldBe` Right "File \"alka-lalka\" at /home/tihonovcore/fp-homework/hw2/testData File size: 0 Permissions {readable = True, writable = True, executable = False, searchable = False}"
+      currDirPath <- currDir
+      let action = Right . unwords . init . lines =<< (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time)
+      action `shouldBe` Right ("Object \"alka-lalka\" at " ++ currDirPath ++ " Size: 0 Permissions {readable = True, writable = True, executable = False, searchable = False}")
 --    it "create file in subdir" $ do
 --      d <- startDirectory
 --      time <- getCurrentTime
@@ -142,12 +153,12 @@ main = hspec $ do
   describe "cd" $ do
     it "cd to exists" $ do
       d <- startDirectory
-      dirr (cd d "cats") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData/cats\n| /home/tihonovcore/fp-homework/hw2/..\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | | NY\n| | | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | | wjuh\n\n| | /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | | woof\n| | anotherFile\n| | lala\n| | notReadMe\n| | close\n| meow"
+      dirr (cd d "cats") `shouldBe` Right "\9500\9472 ..\n\9492\9472 meow"
     it "cd .." $ do
       d0 <- startDirectory
       let d1 = cd d0 "elleFunning"
       let res = (\d -> cd d "..") =<< d1
-      dirr res `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| anotherFile\n| lala\n| notReadMe\n| close"
+      dirr res `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
 --    it "cd to subsubdir" $ do
 --        d <- startDirectory
 --        dirr (cd d "elleFunning/elle") `shouldBe` Right "todo"
@@ -158,7 +169,7 @@ main = hspec $ do
   describe "mkdir" $ do
     it "success" $ do
       d <- startDirectory
-      dirr (mkdir d "trees") `shouldBe` Right "/home/tihonovcore/fp-homework/hw2/testData\n| /home/tihonovcore/fp-homework/hw2/trees\n\n| /home/tihonovcore/fp-homework/hw2/testData/dogs\n| | woof\n| /home/tihonovcore/fp-homework/hw2/testData/elleFunning\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/elle\n| | | NY\n| | /home/tihonovcore/fp-homework/hw2/testData/elleFunning/funning\n| | | wjuh\n\n| /home/tihonovcore/fp-homework/hw2/testData/cats\n| | meow\n| anotherFile\n| lala\n| notReadMe\n| close"
+      dirr (mkdir d "trees") `shouldBe` Right "\9500\9472 trees\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
 --    it "mkdir in subDir" $ do
 --      d <- startDirectory
 --      dirr (mkdir d "cat/cuteCats") `shouldBe` Right "todo"

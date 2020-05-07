@@ -92,8 +92,18 @@ touch directory@(Directory info dirs files) newFileName time
       isNotWritable :: Directory -> Bool
       isNotWritable = not . writable . perm . dirCommonInfo
 
+data Object = ODirectory Directory | OFile File
 dir :: Directory -> String
-dir = show
+dir directory = showObjects $ map ODirectory (subDirs directory) ++ map OFile (subFiles directory)
+  where
+    showObjects :: [Object] -> String
+    showObjects (x : y : other) = "├─ " ++ showObject x ++ "\n" ++ showObjects (y : other)
+    showObjects [x] = "└─ " ++ showObject x
+    showObjects _   = ""
+    
+    showObject :: Object -> String
+    showObject (OFile f) = getFileName f
+    showObject (ODirectory d) = getDirName d  
 
 data OpError = FileNotFound   Name
              | DirNotFound    Name
@@ -148,16 +158,27 @@ rm (Directory i dirs files) expectedName =
            else throwError NoPermissions
       else rmFile (x : pref) xs
 
--- TODO: dir info
 showInfo :: Directory -> Name -> OpMonad Data
-showInfo (Directory _ _ files) expectedName = findInfo files
+showInfo directory expectedName = fileFindInfo (subFiles directory) `opOr` findDirInfo (subDirs directory)
   where
-    findInfo :: [File] -> OpMonad Data
-    findInfo [] = throwError $ FileNotFound expectedName
-    findInfo (x@(File common _ _ access) : xs) =
+    fileFindInfo :: [File] -> OpMonad Data
+    fileFindInfo [] = throwError $ FileNotFound expectedName
+    fileFindInfo (x@(File common _ _ access) : other) =
       if getFileName x == expectedName
       then return $ show common ++ "\nLast access: " ++ show access
-      else findInfo xs
+      else fileFindInfo other
+
+    findDirInfo :: [Directory] -> OpMonad Data
+    findDirInfo [] = throwError $ DirNotFound expectedName
+    findDirInfo (currDir : other) =
+      if getDirName currDir == expectedName
+      then return $ show (dirInfo currDir)
+      else findDirInfo other
+
+    opOr :: OpMonad Data -> OpMonad Data -> OpMonad Data
+    opOr (Left   e1) (Left   e2) = throwError $ Seq e1 e2
+    opOr (Right res) _           = Right res
+    opOr _           (Right res) = Right res
 
 -- TODO: change file size
 rewriteFile :: Directory -> Name -> Data -> OpMonad Directory

@@ -20,8 +20,8 @@ data CommonInfo = Info
 data DirInfo = DirInfo CommonInfo Name Int
 
 instance Show CommonInfo where
-  show info = "File \"" ++ name info ++ "\" at " ++ path info ++
-    "\nFile size: " ++ show (size info) ++ "\n" ++ show (perm info)
+  show info = "Object \"" ++ name info ++ "\" at " ++ path info ++
+    "\nSize: " ++ show (size info) ++ "\n" ++ show (perm info)
 
 instance Show DirInfo where
   show (DirInfo  common _ countFiles) = show common ++ "\nCount files: " ++ show countFiles

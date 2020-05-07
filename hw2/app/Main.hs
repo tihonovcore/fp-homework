@@ -26,6 +26,7 @@ main = do
 loop :: Directory -> IO ()
 loop directory = do
   hSetBuffering stdout NoBuffering
+  putStr $ getFullDirName directory
   putStr "> "
   command <- getCommand
   case evalCommand command directory of
@@ -39,7 +40,7 @@ loop directory = do
       return ()
 
 liftDirectory :: Directory -> Directory
-liftDirectory directory = 
+liftDirectory directory =
   case cd directory ".." of
     Left  _ -> directory
     Right r -> liftDirectory r
@@ -129,19 +130,19 @@ evalCommand c d = match c
     match (VCSMerge fileName left right strategy) = handleDir  (swap23451 merge left right strategy) fileName
     match Exit                     = Nothing
     match _                        = Just ("Unexpected input", d)
-    
+
     handleCd :: FilePath -> Maybe (String, Directory)
-    handleCd filePath = 
+    handleCd filePath =
       case multiCd filePath d of
         (Left     err) -> Just (show err, d)
         (Right newDir) -> Just ("",  newDir)
-    
+
     swap231 :: (a -> b -> c -> d) -> (b -> c -> a -> d)
     swap231 f = \b c' a -> f a b c'
-    
+
     swap312 :: (a -> b -> c -> d) -> (c -> a -> b -> d)
     swap312 f = \c' a b -> f a b c'
-    
+
     swap23451 :: (a -> b -> c -> d -> e -> f) -> (b -> c -> d -> e -> a -> f)
     swap23451 f b c' d' e a = f a b c' d' e
 
@@ -172,4 +173,5 @@ evalCommand c d = match c
 --    handleData (Right input) = Just (input,    d)
 
 showResult :: String -> IO ()
-showResult = putStrLn
+showResult [] = return ()
+showResult s  = putStrLn s
