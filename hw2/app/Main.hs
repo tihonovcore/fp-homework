@@ -9,23 +9,18 @@ import Data.Time.Clock (UTCTime)
 import Data.Time (getCurrentTime)
 import Numeric (readDec)
 import System.FilePath (takeDirectory, takeFileName, splitDirectories, joinPath)
-
-testPath :: String
---testPath = "/home/tihonovcore/testHaskellCL"
-testPath = "/home/tihonovcore/fp-homework/hw2/testData"
+import System.Environment (getArgs)
 
 main :: IO ()
 main = do
---  startDir <- getLine       -- read dir. TODO: read as arg
-  let startDir = testPath
+  hSetBuffering stdout NoBuffering
+  startDir <- head <$> getArgs
   ddd <- readDirectoryState startDir
-  -- TODO: remove absolute
-  vcs <- readVcsDirectory "/home/tihonovcore/fp-homework/hw2/vcs/testData"
+  vcs <- readVcsDirectory $ joinPath [takeDirectory startDir, "vcs", takeFileName startDir]
   loop $ mergeDirAndVcs ddd vcs
 
 loop :: Directory -> IO ()
 loop directory = do
-  hSetBuffering stdout NoBuffering
   putStr $ getFullDirName directory
   putStr "> "
   command <- getCommand
@@ -65,7 +60,6 @@ data Command = Dir
              | Exit
              | Error
 
--- TODO: make better
 getCommand :: IO Command
 getCommand = do
   line <- getLine
@@ -82,10 +76,10 @@ getCommand = do
                  | s == "add"    -> fmap VCSAdd    getLine
                  | s == "log"    -> fmap VCSLog    getLine
                  | s == "commit" -> fmap VCSCommit getLine
-                 | s == "showRev" -> VCSRevision   <$> getLine <*> readNumber
-                 | s == "rmRev"   -> VCSRmRevision <$> getLine <*> readNumber
-                 | s == "vcs-rmFile" -> VCSRmFile <$> getLine
-                 | s == "vcs-merge" -> VCSMerge <$> getLine <*> readNumber <*> readNumber <*> readStrategy
+                 | s == "showRev"    -> VCSRevision   <$> getLine <*> readNumber
+                 | s == "rmRev"      -> VCSRmRevision <$> getLine <*> readNumber
+                 | s == "vcs-rmFile" -> VCSRmFile     <$> getLine
+                 | s == "vcs-merge"  -> VCSMerge      <$> getLine <*> readNumber <*> readNumber <*> readStrategy
                  | s == "exit"   -> return Exit
                  | otherwise     -> return Error
 
@@ -111,11 +105,11 @@ evalCommand :: Command -> Directory -> Maybe (String, Directory)
 evalCommand c d = match c
   where
     match :: Command -> Maybe (String, Directory)
-    match Dir                      = Just (dir d, d)
+    match Dir                      = Just (showDirsAndFiles d, d)
     match (MkDir  dirName)         = handleDir mkdir dirName
     match (Cd     dirName)         = handleCd dirName
     match (Rm     objName)         = handleDir  rm  objName
-    match (Cat   fileName)         = handleData cat fileName  --   d fileName
+    match (Cat   fileName)         = handleData cat fileName
     match (Main.Info objName)      = handleData showInfo objName
     match (Find  fileName)         = handleData findFile fileName
     match (Touch fileName time)    = handleDir  (swap312 touch time) fileName
@@ -138,10 +132,10 @@ evalCommand c d = match c
         (Right newDir) -> Just ("",  newDir)
 
     swap231 :: (a -> b -> c -> d) -> (b -> c -> a -> d)
-    swap231 f = \b c' a -> f a b c'
+    swap231 f b c' a = f a b c'
 
     swap312 :: (a -> b -> c -> d) -> (c -> a -> b -> d)
-    swap312 f = \c' a b -> f a b c'
+    swap312 f c' a b = f a b c'
 
     swap23451 :: (a -> b -> c -> d -> e -> f) -> (b -> c -> d -> e -> a -> f)
     swap23451 f b c' d' e a = f a b c' d' e
@@ -162,15 +156,6 @@ evalCommand c d = match c
           up currDir =
             let upSteps = map (const "..") $ tail $ splitDirectories (takeDirectory longPath) in
             multiCd (joinPath upSteps) currDir
-
-
---    handleDir :: OpMonad Directory -> Maybe (String, Directory)
---    handleDir (Left     err) = Just (show err, d)
---    handleDir (Right newDir) = Just ("",  newDir)
---
---    handleData :: OpMonad Data -> Maybe (String, Directory)
---    handleData (Left    err) = Just (show err, d)
---    handleData (Right input) = Just (input,    d)
 
 showResult :: String -> IO ()
 showResult [] = return ()

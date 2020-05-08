@@ -23,14 +23,14 @@ catr :: Name -> OpMonad Directory -> OpMonad Data
 catr name' = (=<<) (`cat` name')
 
 dirr :: OpMonad Directory -> OpMonad Data
-dirr curr = dir <$> curr
+dirr curr = showDirsAndFiles <$> curr
 
 main :: IO ()
 main = hspec $ do
   describe "dir" $
     it "dir" $ do
       d <- startDirectory
-      dir d `shouldBe` "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+      showDirsAndFiles d `shouldBe` "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
 
   describe "cat" $ do
     it "succ" $ do
@@ -49,22 +49,22 @@ main = hspec $ do
   describe "rm" $ do
     it "succ" $ do
       d <- startDirectory
-      fmap dir (rm d "notReadMe") `shouldBe` Right "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 lala\n\9500\9472 anotherFile\n\9492\9472 close"
+      fmap showDirsAndFiles (rm d "notReadMe") `shouldBe` Right "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 lala\n\9500\9472 anotherFile\n\9492\9472 close"
     it "file not found" $ do
       d <- startDirectory
-      fmap dir (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
+      fmap showDirsAndFiles (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
     it "file no permitions" $ do
       d <- startDirectory
-      fmap dir (rm d "close") `shouldBe` Left (Seq NoPermissions (DirNotFound "close"))
+      fmap showDirsAndFiles (rm d "close") `shouldBe` Left (Seq NoPermissions (DirNotFound "close"))
     it "directory" $ do
       d <- startDirectory
-      fmap dir (rm d "cats") `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 closeDir\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+      fmap showDirsAndFiles (rm d "cats") `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 closeDir\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
     it "directory not found" $ do
       d <- startDirectory
-      fmap dir (rm d "narwhals") `shouldBe` Left (Seq (FileNotFound "narwhals") (DirNotFound "narwhals"))
+      fmap showDirsAndFiles (rm d "narwhals") `shouldBe` Left (Seq (FileNotFound "narwhals") (DirNotFound "narwhals"))
     it "directory no permissions" $ do
       d <- startDirectory
-      fmap dir (rm d "closeDir") `shouldBe` Left (Seq (FileNotFound "closeDir") NoPermissions)
+      fmap showDirsAndFiles (rm d "closeDir") `shouldBe` Left (Seq (FileNotFound "closeDir") NoPermissions)
 
   describe "showInfo" $ do
     it "file" $ do

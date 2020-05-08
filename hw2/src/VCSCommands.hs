@@ -5,7 +5,9 @@ import Lib
 import Control.Monad.Except (throwError)
 import Data.Algorithm.Diff
 
--- TODO: add dir
+-- | Add file to VCS, makes initial commit. If there
+-- isn't file - returns FileNotFound, if there isn't 
+-- any commits - FileNotInVcs, if file isn't readable - NoPermissions.
 add :: Name -> Directory -> OpMonad Directory
 add expectedName (Directory di dirs files) = 
   if expectedName == ".." 
@@ -21,7 +23,7 @@ add expectedName (Directory di dirs files) =
       then if isReadableFile file
            then return $ addContent file : xs
            else throwError NoPermissions
-      else (\list -> return $ file : list) =<< mapFileIfExists xs
+      else (:) file <$> mapFileIfExists xs
 
     addContent :: File -> File
     addContent file =
@@ -29,6 +31,9 @@ add expectedName (Directory di dirs files) =
       then File (commonInfo file) (content file) [content file] (lastAccess file)
       else file
 
+-- | Show list of revisions by file.
+-- If there isn't file - returns FileNotFound.
+-- If file exists, but hasn't any commit - FileNotInVcs.
 log :: Name -> Directory -> OpMonad Data
 log expectedName (Directory _ _ files) = logRender <$> getRevisions files
   where
@@ -50,7 +55,9 @@ log expectedName (Directory _ _ files) = logRender <$> getRevisions files
     fileInVcs :: File -> Bool
     fileInVcs = not . null . revisions
 
--- TODO: comment
+-- | Add new revision. If there isn't file - returns
+-- FileNotFound, if there isn't any commits - FileNotInVcs,
+-- if file isn't readable - NoPermissions.
 commit :: Name -> Directory -> OpMonad Directory
 commit expectedName (Directory di dirs files) = Directory di dirs <$> commitFile files
   where
@@ -68,6 +75,9 @@ commit expectedName (Directory di dirs files) = Directory di dirs <$> commitFile
     commitedFile :: File -> File
     commitedFile (File ci cont revs la) = File ci cont (cont : revs) la
 
+-- | Show revision by index. If isn't file - returns
+-- FileNotFound, if there isn't revision with
+-- specified number - WrongRevisionIndex.
 showRevision :: Name -> Int -> Directory -> OpMonad Data
 showRevision expectedName index (Directory _ _ files) = getRevision files
   where
@@ -84,6 +94,9 @@ showRevision expectedName index (Directory _ _ files) = getRevision files
                               | n >  1    = getRevisionN (n - 1) xs
                               | otherwise = throwError $ WrongRevisionIndex expectedName
 
+-- | Remove specified revision. If there isn't
+-- revision with specified number - WrongRevisionIndex,
+-- if there isn't file - returns FileNotFound.
 removeRevision :: Name -> Int -> Directory -> OpMonad Directory
 removeRevision expectedName index (Directory di dirs files) = Directory di dirs <$> updateRevision files
   where
@@ -100,6 +113,8 @@ removeRevision expectedName index (Directory di dirs files) = Directory di dirs 
                                       | n >  1    = removeRevisionN (n - 1) (pref ++ [rev]) xs
                                       | otherwise = throwError $ WrongRevisionIndex expectedName
 
+-- | Remove specified file from VCS (remove all commits).
+-- If there file - returns FileNotFound.
 rmFileFromVcs :: Name -> Directory -> OpMonad Directory
 rmFileFromVcs expectedName (Directory di dirs files) = Directory di dirs <$> removeFile files
   where
@@ -111,6 +126,9 @@ rmFileFromVcs expectedName (Directory di dirs files) = Directory di dirs <$> rem
       else (:) file <$> removeFile xs
 
 data MergeStrategy = MSLeft | MSRight | MSBoth | MSInteractive
+
+-- | Merge two specified commits, and make new one
+-- with result of merge.
 merge :: Name -> Int -> Int -> MergeStrategy -> Directory -> OpMonad Directory
 merge expectedName first second strategy (Directory di dirs files) = Directory di dirs <$> fileHandler files
   where

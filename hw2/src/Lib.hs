@@ -3,14 +3,14 @@ module Lib where
 import DirectoryState
 
 import Data.Time.Clock (UTCTime)
-import Control.Applicative ((<|>))
 import Control.Monad.Except (throwError)
 import System.Directory (readable, writable)
-import System.FilePath (splitPath, splitDirectories)
-import Control.Monad (foldM)--import Debug.Trace (trace)
-import Utils
+import System.FilePath (splitDirectories)
+import Control.Monad (foldM)
 
--- |Nothing if dir not found
+-- | Go to subdirectory by name. Returns Right subdirectory,
+-- or Left DirNotFound if directory in absent,
+-- or Left NoPermissions if directory is not readable.
 -- 
 -- u> cd v
 -- delete `v` from `u`'s directories
@@ -52,26 +52,36 @@ cd (Directory info dirs files) expectedName = do
     isReadable :: Directory -> Bool
     isReadable (Directory (DirInfo ci _ _) _ _) = readable (perm ci)
 
--- |Nothing if dir exists
-mkdir :: Directory -> String -> OpMonad Directory
+-- | Create new Directory with new directory
+-- If current directory contains file or another
+-- directory with expected name, it returns Left FileAlreadyExists
+-- or Left DirAlreadyExists.
+mkdir :: Directory -> Name -> OpMonad Directory
 mkdir curr@(Directory currInfo dirs files) newDirName
-  | dirAlreadyExistsIn dirs = throwError $ DirAlreadyExists newDirName
+  |  dirAlreadyExistsIn dirs  = throwError $  DirAlreadyExists newDirName
+  | fileAlreadyExistsIn files = throwError $ FileAlreadyExists newDirName
   | isWritable curr = return $ Directory currInfo newDirs files
   | otherwise = throwError NoPermissions
   where
     dirAlreadyExistsIn :: [Directory] -> Bool
     dirAlreadyExistsIn = foldr (\d -> (||) (getDirName d == newDirName)) False
 
+    fileAlreadyExistsIn :: [File] -> Bool
+    fileAlreadyExistsIn = foldr (\f -> (||) (getFileName f == newDirName)) False
+
     newDirs :: [Directory]
     newDirs = 
-      let newDirPath = case currInfo of (DirInfo ci _ _) -> path ci in
+      let newDirPath = getFullDirName curr in
       Directory (newDirInfo newDirPath newDirName) [] [] : dirs
     
     isWritable :: Directory -> Bool
     isWritable (Directory (DirInfo ci _ _) _ _) = writable (perm ci)
 
--- |Nothing if file exists
-touch :: Directory -> String -> UTCTime -> OpMonad Directory
+-- | Returns new Directory with new file,
+-- if file already exists in directory - FileAlreadyExists,
+-- if directory already exists in current directory - DirAlreadyExists,
+-- or NoPermissions if current directory isn't writable.
+touch :: Directory -> Name -> UTCTime -> OpMonad Directory
 touch directory@(Directory info dirs files) newFileName time
   | isNotWritable directory   = throwError NoPermissions
   | fileAlreadyExistsIn files = throwError $ FileAlreadyExists newFileName
@@ -93,8 +103,10 @@ touch directory@(Directory info dirs files) newFileName time
       isNotWritable = not . writable . perm . dirCommonInfo
 
 data Object = ODirectory Directory | OFile File
-dir :: Directory -> String
-dir directory = showObjects $ map ODirectory (subDirs directory) ++ map OFile (subFiles directory)
+
+-- | Show subdirectories and files by directory.
+showDirsAndFiles :: Directory -> String
+showDirsAndFiles directory = showObjects $ map ODirectory (subDirs directory) ++ map OFile (subFiles directory)
   where
     showObjects :: [Object] -> String
     showObjects (x : y : other) = "├─ " ++ showObject x ++ "\n" ++ showObjects (y : other)
@@ -118,19 +130,26 @@ data OpError = FileNotFound   Name
 
 type OpMonad = Either OpError
 
--- |Nothing if file not found
+-- | Returns file content, NoPermissions if file is
+-- not readable and FileNotFound if directory does
+-- not contains file with specified name.
 cat :: Directory -> Name -> OpMonad Data
-cat (Directory _ _ files) expectedName = find files
+cat dir expectedName = find $ subFiles dir
   where
     find :: [File] -> OpMonad Data
     find [] = throwError $ FileNotFound expectedName
-    find (x : xs) =
-      if getFileName x == expectedName
-      then if isReadableFile x
-           then return $ content x
+    find (file : other) =
+      if getFileName file == expectedName
+      then if isReadableFile file
+           then return $ content file
            else throwError NoPermissions
-      else find xs
+      else find other
 
+-- | Create new Directory without specified object,
+-- in case it of exists, or NoPermissions if directory
+-- is not writable, FileNotFound if there isn't file with
+-- specified name or DirNotFound if there isn't directory
+-- with specified name.
 rm :: Directory -> Name -> OpMonad Directory
 rm (Directory i dirs files) expectedName =
   let newFiles = rmFile [] files
@@ -158,6 +177,7 @@ rm (Directory i dirs files) expectedName =
            else throwError NoPermissions
       else rmFile (x : pref) xs
 
+-- | Show information about directory of file
 showInfo :: Directory -> Name -> OpMonad Data
 showInfo directory expectedName = fileFindInfo (subFiles directory) `opOr` findDirInfo (subDirs directory)
   where
@@ -180,7 +200,10 @@ showInfo directory expectedName = fileFindInfo (subFiles directory) `opOr` findD
     opOr (Right res) _           = Right res
     opOr _           (Right res) = Right res
 
--- TODO: change file size
+-- | Change file content to new one.
+-- Return FileNotFound if file doesn't exists
+-- in current directory or NoPermissions if file
+-- is not writable.
 rewriteFile :: Directory -> Name -> Data -> OpMonad Directory
 rewriteFile (Directory i d files) expectedName newContent =
   Right . Directory i d =<< write files
@@ -194,7 +217,10 @@ rewriteFile (Directory i d files) expectedName newContent =
            else throwError NoPermissions
       else fmap ((:) file) (write other)
 
--- TODO: change file size
+-- | Addend content to exiting file.
+-- Return FileNotFound if file doesn't exists
+-- in current directory or NoPermissions if file
+-- is not writable.
 append :: Directory -> Name -> Data -> OpMonad Directory
 append (Directory i d files) expectedName newContent =
     Right . Directory i d =<< add files
@@ -208,23 +234,28 @@ append (Directory i d files) expectedName newContent =
            else throwError NoPermissions
       else fmap ((:) file) (add other)
 
+-- | Searched file in current directory and in subdirectories.
+-- Returns FileNotFound if there isn't file with specified name,
+-- or absolute path to file.
 findFile :: Directory -> Name -> OpMonad Data
 findFile (Directory _ dirs files) expectedName = searchInFiles files `opOr` searchInDirs dirs
   where
     searchInFiles :: [File] -> OpMonad Data
-    searchInFiles [] = throwError $ ObjectNotFound expectedName
+    searchInFiles [] = throwError $ FileNotFound expectedName
     searchInFiles (file : other) =
       if getFileName file == expectedName
       then return $ getFullFileName file
       else searchInFiles other
 
     searchInDirs :: [Directory] -> OpMonad Data
-    searchInDirs [] = throwError $ ObjectNotFound expectedName
+    searchInDirs [] = throwError $ FileNotFound expectedName
     searchInDirs (x : xs) = findFile x expectedName `opOr` searchInDirs xs
     
     opOr :: OpMonad Data -> OpMonad Data -> OpMonad Data
     opOr (Left _) r = r
     opOr success  _ = success 
 
+-- | If path contains intermediate directories
+-- `multiCd` goes through all of them
 multiCd :: FilePath -> Directory -> OpMonad Directory
 multiCd longPath directory = foldM cd directory $ filter (\n -> n /= ".") $ splitDirectories longPath

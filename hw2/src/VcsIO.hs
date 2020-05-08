@@ -1,28 +1,15 @@
 module VcsIO where
 
 import DirectoryState
-import System.Directory (doesDirectoryExist, getDirectoryContents, createDirectory, doesFileExist)
+import System.Directory (doesDirectoryExist, createDirectory, removeDirectoryRecursive)
 import System.FilePath (joinPath, takeDirectory, takeFileName, makeRelative)
-import Data.List (isPrefixOf, union, sortBy)
-import Control.Monad (filterM)
+import Data.List (sortBy)
 import Data.Either (lefts, rights)
-import Data.Time (UTCTime(..))
-import Data.Time.Clock (DiffTime(..), secondsToDiffTime, UTCTime)
+import Data.Time.Clock (secondsToDiffTime, UTCTime(..))
 import Data.Time.Calendar (Day(..))
-import Data.Fixed (Pico)
-import Data.Fixed (Fixed(..))
-import Utils (strace)
 
-data VCSFile = VCSFile
-  { vcsFileName  :: Name
-  , vcsRevisions :: [Data]
-  }
-data VCSDirectory = VCSDirectory
-  { vcsDirName  :: Name
-  , vcsSubDirs  :: [VCSDirectory]
-  , vcsSubFiles :: [VCSFile]
-  }
-
+-- | Read information about VCS from file system.
+-- Skip zero commit and unite revisions to file.
 readVcsDirectory :: FilePath -> IO Directory
 readVcsDirectory vcsDirPath = upRevisions <$> readDirectoryState vcsDirPath
   where
@@ -32,25 +19,27 @@ readVcsDirectory vcsDirPath = upRevisions <$> readDirectoryState vcsDirPath
         Directory (dirInfo dir) (lefts fileDirList) (rights fileDirList)
 
     action :: Directory -> Either Directory File
-    action dir = 
+    action dir =
       if isFile dir
       then Right $ mkFileWithRevisions (getFullDirName dir) (map content (skipZero $ sortByIndex $ subFiles dir))
       else Left $ upRevisions dir
       where
         skipZero :: [File] -> [File]
         skipZero = filter (\f -> getFileName f /= "0" || (length (content f) `seq` False))
-        
+
         isFile :: Directory -> Bool
         isFile directory = null (subDirs directory) && (not . null $ subFiles directory)
-        
+
         sortByIndex :: [File] -> [File]
         sortByIndex = sortBy (\l r -> compare (getFileName l) (getFileName r))
 
     mkFileWithRevisions :: FilePath -> [Data] -> File
     mkFileWithRevisions filePath revs =
       let ci = emptyInfo (takeDirectory filePath) (takeFileName filePath) in
-      File ci "" revs (UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)) -- TODO: aaaaaaaaa
+      File ci "" revs (UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0))
 
+-- | Append revisions form vcs-directory to files,
+-- exists in work-directory. 
 mergeDirAndVcs :: Directory -> Directory -> Directory
 mergeDirAndVcs dir vcs = Directory (dirInfo dir) (handleDirs $ subDirs dir) (handleFiles $ subFiles dir)
   where
@@ -91,15 +80,23 @@ mergeDirAndVcs dir vcs = Directory (dirInfo dir) (handleDirs $ subDirs dir) (han
     mergeFiles :: File -> File -> File
     mergeFiles file vcsFile = File (commonInfo file) (content file) (revisions vcsFile) (lastAccess file)
 
--- TODO: check - we need to rewrite anything (e.g. revisions may be deleted)
+-- | Save information about VCS into file system
+-- For directory from ".../parent/current", VCS directory
+-- will be in ".../parent/vcs/current".
+--
+-- For each file creates its own directory with file's name
+-- as name. Directory will contains file "0" - zero commit.
+-- Its uses for understanding that directory is container 
+-- for revisions. Here also saves all revisions with names "1", "2", etc.
 writeVcsState :: Directory -> IO ()
 writeVcsState currDir = makeVcsDir >> writeDir currDir
   where
     makeVcsDir :: IO ()
-    makeVcsDir =
-      let ci = dirCommonInfo currDir in
-      let pathToVcs = joinPath [path ci, "vcs"] in
-        mkDirIfAbsent pathToVcs
+    makeVcsDir = do
+      let ci = dirCommonInfo currDir
+      let pathToVcs = joinPath [path ci, "vcs"]
+      removeDirectoryRecursive pathToVcs
+      createDirectory pathToVcs
 
     toVcsPath :: FilePath -> FilePath
     toVcsPath filePath =
@@ -127,8 +124,6 @@ writeVcsState currDir = makeVcsDir >> writeDir currDir
     writeVcsFile :: File -> IO ()
     writeVcsFile file = do
       let pathToCurrFile = toVcsPath (getFullFileName file)
-      if 10 == foldr ((+) . length) 0 (revisions file) then return () else return ()
-      
       let zeroCommit = ""
       mkDirIfAbsent pathToCurrFile
       writeRevisions pathToCurrFile (zeroCommit : revisions file) 0
