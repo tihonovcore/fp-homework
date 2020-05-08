@@ -6,7 +6,7 @@ import Control.Monad.Except (throwError)
 import Data.Algorithm.Diff
 
 -- | Add file to VCS, makes initial commit. If there
--- isn't file - returns FileNotFound, if there isn't 
+-- isn't file - returns FileNotFound, if there isn't
 -- any commits - FileNotInVcs, if file isn't readable - NoPermissions.
 add :: Name -> Directory -> OpMonad Directory
 add expectedName (Directory di dirs files) = 
