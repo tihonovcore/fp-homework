@@ -85,28 +85,36 @@ render indent currDir =
       ln [] = ""
       ln _  = "\n"
 
+infoWithPermissions :: Permissions -> FilePath -> Name -> CommonInfo
+infoWithPermissions permissions newPath newName = Info { path = newPath, name = newName, size = 0, perm = permissions }
+
 emptyInfo :: FilePath -> Name -> CommonInfo
-emptyInfo newPath newName =
-  let newPerm = setOwnerReadable True $ setOwnerWritable True emptyPermissions in
-    Info { path = newPath, name = newName,  size = 0, perm = newPerm }
+emptyInfo  = infoWithPermissions $ emptyPermissions { readable = True, writable = True }
 
 -- |Make simple Info
 newDirInfo :: FilePath -> Name -> DirInfo
 newDirInfo newPath newName = 
   DirInfo (emptyInfo newPath newName) ".." 0
 
+newDirInfoWithPermissions :: Permissions -> FilePath -> Name -> DirInfo
+newDirInfoWithPermissions permissions newPath newName = DirInfo (infoWithPermissions permissions newPath newName) ".." 0
+
 -- |Read DirectoryState from file system
--- TODO: clear
 readDirectoryState :: Name -> IO Directory
 readDirectoryState dirName = do
   directory <- readDirectory dirName
   readVCS dirName directory
     where
-      readDirectory :: Name -> IO Directory
+      readDirectory :: FilePath -> IO Directory
       readDirectory currDirName = do
-        pathList <- (toAbsolute currDirName . skipDot . getDirectoryContents) currDirName
-        d <- readDirs pathList $ Directory (newDirInfo (takeDirectory currDirName) (takeFileName currDirName)) [] []
-        readFiles pathList d
+        permissions <- getPermissions currDirName
+        let emptyDir = Directory (newDirInfoWithPermissions permissions (takeDirectory currDirName) (takeFileName currDirName)) [] []
+        if readable permissions
+        then do
+          pathList <- (toAbsolute currDirName . skipDot . getDirectoryContents) currDirName
+          d <- readDirs pathList emptyDir
+          readFiles pathList d
+        else return emptyDir
 
       readFiles :: [FilePath] -> Directory -> IO Directory
       readFiles pathList oldDir =
@@ -146,7 +154,11 @@ mkFile absolutePath = do
     split p = (takeDirectory p, takeFileName p)
 
     fileContent :: IO String
-    fileContent = readFile absolutePath
+    fileContent = do
+      isReadable <- readable <$> getPermissions absolutePath
+      if isReadable
+      then readFile absolutePath
+      else return ""
     
     time :: IO UTCTime
     time = getAccessTime absolutePath

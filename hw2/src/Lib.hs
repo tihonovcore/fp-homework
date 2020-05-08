@@ -100,10 +100,10 @@ dir directory = showObjects $ map ODirectory (subDirs directory) ++ map OFile (s
     showObjects (x : y : other) = "├─ " ++ showObject x ++ "\n" ++ showObjects (y : other)
     showObjects [x] = "└─ " ++ showObject x
     showObjects _   = ""
-    
+
     showObject :: Object -> String
     showObject (OFile f) = getFileName f
-    showObject (ODirectory d) = getDirName d  
+    showObject (ODirectory d) = getDirName d
 
 data OpError = FileNotFound   Name
              | DirNotFound    Name

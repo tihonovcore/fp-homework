@@ -1,7 +1,7 @@
 import Lib
 import VCSCommands
 import DirectoryState
-import System.Directory (setPermissions, emptyPermissions, readable, writable, getCurrentDirectory)
+import System.Directory (setPermissions, emptyPermissions, getCurrentDirectory)
 
 import Test.Hspec
 import Data.Time (getCurrentTime)
@@ -13,7 +13,11 @@ currDir = do
   return $ joinPath [filePath, "testData"]
 
 startDirectory :: IO Directory
-startDirectory = readDirectoryState =<< currDir
+startDirectory = do
+  currDirPath <- currDir
+  setPermissions (joinPath [currDirPath, "close"])    emptyPermissions
+  setPermissions (joinPath [currDirPath, "closeDir"]) emptyPermissions
+  readDirectoryState currDirPath
 
 catr :: Name -> OpMonad Directory -> OpMonad Data
 catr name' = (=<<) (`cat` name')
@@ -26,41 +30,41 @@ main = hspec $ do
   describe "dir" $
     it "dir" $ do
       d <- startDirectory
-      dir d `shouldBe` "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+      dir d `shouldBe` "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
 
   describe "cat" $ do
-    it "cat" $ do
+    it "succ" $ do
       d <- startDirectory
       cat d "notReadMe"   `shouldBe` Right "lalala u've read! prokaznik\n"
-    it "cat" $ do
+    it "succ too" $ do
       d <- startDirectory
       cat d "anotherFile" `shouldBe` Right "there is one more 123456789!@#$%^&*()"
-    it "cat" $ do
+    it "file not found" $ do
       d <- startDirectory
       cat d "fail"        `shouldBe` Left (FileNotFound "fail")
-    -- TODO: no permissions
+    it "no pemissions" $ do
+      d <- startDirectory
+      cat d "close"       `shouldBe` Left NoPermissions
 
   describe "rm" $ do
-    it "rmFile" $ do
+    it "succ" $ do
       d <- startDirectory
-      fmap dir (rm d "notReadMe") `shouldBe` Right "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 lala\n\9500\9472 anotherFile\n\9492\9472 close"
-    it "rmFile not found" $ do
+      fmap dir (rm d "notReadMe") `shouldBe` Right "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 lala\n\9500\9472 anotherFile\n\9492\9472 close"
+    it "file not found" $ do
       d <- startDirectory
       fmap dir (rm d "nonExisistsdfs") `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
-    --TODO: rm file no perm
---    it "rmNoPermitions" $ do
---      d <- startDirectory
---      fmap dir (rm d "notReadMe") `shouldBe` Right ""
-    it "rmDir" $ do
+    it "file no permitions" $ do
       d <- startDirectory
-      fmap dir (rm d "cats") `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
-    it "rmDir not found" $ do
+      fmap dir (rm d "close") `shouldBe` Left (Seq NoPermissions (DirNotFound "close"))
+    it "directory" $ do
+      d <- startDirectory
+      fmap dir (rm d "cats") `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 closeDir\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+    it "directory not found" $ do
       d <- startDirectory
       fmap dir (rm d "narwhals") `shouldBe` Left (Seq (FileNotFound "narwhals") (DirNotFound "narwhals"))
-   --TODO: rm dir no perm
---    it "rmDir no perm" $ do
---      d <- startDirectory
---      fmap dir (rm d "cats") `shouldBe` Right ""
+    it "directory no permissions" $ do
+      d <- startDirectory
+      fmap dir (rm d "closeDir") `shouldBe` Left (Seq (FileNotFound "closeDir") NoPermissions)
 
   describe "showInfo" $ do
     it "file" $ do
@@ -72,30 +76,19 @@ main = hspec $ do
       d <- startDirectory
       showInfo d "nonExisistsdfs" `shouldBe` Left (Seq (FileNotFound "nonExisistsdfs") (DirNotFound "nonExisistsdfs"))
     
---    it "file in subdir" $ do
---      d <- startDirectory
---      (unwords . init . lines <$> showInfo d "cats/meow") `shouldBe` Right ""
-   --TODO: work with dir
---    it "dir" $ do
---      d <- startDirectory
---      showInfo d "nonExisistsdfs" `shouldBe` Nothing
---
---    it "dir not found" $ do
---      d <- startDirectory
---      showInfo d "nonExisistsdfs" `shouldBe` Nothing
-   -- TODO: showInfo of subdir
+    it "directory" $ do
+      d <- startDirectory
+      currDirPath <- currDir
+      showInfo d "cats" `shouldBe` Right ("Object \"cats\" at " ++ currDirPath ++ "\nSize: 0\nPermissions {readable = True, writable = True, executable = False, searchable = True}\nCount files: 0")
 
   describe "rewriteFile" $ do
     it "succ" $ do
       d <- startDirectory
       catr "notReadMe" (rewriteFile d "notReadMe" "oh, STOP READING") `shouldBe` Right "oh, STOP READING"
---    it "file in subDir" $ do
---      d <- startDirectory
---      catr "elleFunning/elle/NY" (rewriteFile d "elleFunning/elle/NY" "haha, works!") `shouldBe` Right "haha, works!"
     it "file not found" $ do
       d <- startDirectory
       catr "nonExisistsdfs" (rewriteFile d "nonExisistsdfs" "lalalalal") `shouldBe` Left (FileNotFound "nonExisistsdfs")
-    it "no perm (NOTE: file `testData/close should be readOnly)" $ do  -- TODO: write perm before testing
+    it "no permission" $ do
       d <- startDirectory
       catr "close" (rewriteFile d "close" "lalalalal") `shouldBe` Left NoPermissions
 
@@ -103,18 +96,15 @@ main = hspec $ do
     it "succ" $ do
       d <- startDirectory
       catr "notReadMe" (append d "notReadMe" "\nif u younger 18") `shouldBe` Right "lalala u've read! prokaznik\n\nif u younger 18"
---    it "file in subDir" $ do
---      d <- startDirectory
---      catr "elleFunning/elle/NY" (append d "elleFunning/elle/NY" "APPEND") `shouldBe` Right "todo"
     it "file not found" $ do
       d <- startDirectory
       catr "nonExisistsdfs" (append d "nonExisistsdfs" "yeah") `shouldBe` Left (FileNotFound "nonExisistsdfs")
-    it "no perm (NOTE: file `testData/close should be readOnly)" $ do  -- TODO: write perm before testing
+    it "no permission" $ do
       d <- startDirectory
       catr "close" (append d "close" "yeah") `shouldBe` Left NoPermissions
 
   describe "findFile" $ do
-    it "this dir" $ do
+    it "in current dir" $ do
       d <- startDirectory
       currDirPath <- currDir
       findFile d "close" `shouldBe` Right (joinPath [currDirPath, "close"])
@@ -130,17 +120,13 @@ main = hspec $ do
     it "create file" $ do
       d <- startDirectory
       time <- getCurrentTime
-      dirr (touch d "alka-lalka" time) `shouldBe` Right "\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 alka-lalka\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+      dirr (touch d "alka-lalka" time) `shouldBe` Right "\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 alka-lalka\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
     it "check path & name" $ do
       d <- startDirectory
       time <- getCurrentTime
       currDirPath <- currDir
       let action = Right . unwords . init . lines =<< (flip showInfo "alka-lalka" =<< touch d "alka-lalka" time)
       action `shouldBe` Right ("Object \"alka-lalka\" at " ++ currDirPath ++ " Size: 0 Permissions {readable = True, writable = True, executable = False, searchable = False}")
---    it "create file in subdir" $ do
---      d <- startDirectory
---      time <- getCurrentTime
---      dirr (touch d "dogs/atata" time) `shouldBe` Right "todo"
     it "file already exisits" $ do
       d <- startDirectory
       time <- getCurrentTime
@@ -151,28 +137,22 @@ main = hspec $ do
       dirr (touch d "dogs" time) `shouldBe` Left (DirAlreadyExists "dogs")
 
   describe "cd" $ do
-    it "cd to exists" $ do
+    it "succ" $ do
       d <- startDirectory
       dirr (cd d "cats") `shouldBe` Right "\9500\9472 ..\n\9492\9472 meow"
-    it "cd .." $ do
+    it ".." $ do
       d0 <- startDirectory
       let d1 = cd d0 "elleFunning"
       let res = (\d -> cd d "..") =<< d1
-      dirr res `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
---    it "cd to subsubdir" $ do
---        d <- startDirectory
---        dirr (cd d "elleFunning/elle") `shouldBe` Right "todo"
-    it "dir not found" $ do
+      dirr res `shouldBe` Right "\9500\9472 elleFunning\n\9500\9472 dogs\n\9500\9472 closeDir\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
+    it "directory not found" $ do
       d <- startDirectory
       dirr (cd d "dooogs") `shouldBe` Left (DirNotFound "dooogs")
 
   describe "mkdir" $ do
     it "success" $ do
       d <- startDirectory
-      dirr (mkdir d "trees") `shouldBe` Right "\9500\9472 trees\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
---    it "mkdir in subDir" $ do
---      d <- startDirectory
---      dirr (mkdir d "cat/cuteCats") `shouldBe` Right "todo"
+      dirr (mkdir d "trees") `shouldBe` Right "\9500\9472 trees\n\9500\9472 closeDir\n\9500\9472 dogs\n\9500\9472 elleFunning\n\9500\9472 cats\n\9500\9472 anotherFile\n\9500\9472 lala\n\9500\9472 notReadMe\n\9492\9472 close"
     it "dir already Exists" $ do
       d <- startDirectory
       dirr (mkdir d "cats") `shouldBe` Left (DirAlreadyExists "cats")
@@ -184,12 +164,6 @@ main = hspec $ do
       let d2 = add "lala" =<< d1
       let d3 = VCSCommands.log "lala" =<< d2
       d3 `shouldBe` Right "\n### 1: \ntest331"
---    it "add: ok, log: ok. work with subdirectory" $ do
---      d0 <- startDirectory
---      let d1 = rewriteFile d0 "dogs/woof" "p'osikki"
---      let d2 = add "dogs/woof" =<< d1
---      let d3 = VCSCommands.log "dogs/woof" =<< d2
---      d3 `shouldBe` Right "todo"
     it "add: fail, log: ok" $ do
       d0 <- startDirectory
       let d1 = add "banditka" d0
@@ -219,15 +193,6 @@ main = hspec $ do
       let d1 = commit "notReadMe" d0
       let d2 = VCSCommands.log "notReadMe" =<< d1
       d2 `shouldBe` Left (FileNotInVcs "notReadMe")
---    it "commint file from subdir" $ do
---      d0 <- startDirectory
---      let file = "dogs/woof"
---      let d1 = rewriteFile d0 file "woof woof"
---      let d2 = add file =<< d1
---      let d3 = (\d -> append d file " mtfk") =<< d2
---      let d4 = commit file =<< d3
---      let d5 = VCSCommands.log file =<< d4
---      d5 `shouldBe` Right "todo"
 
   describe "remove file from vcs" $ do
     it "success" $ do
@@ -248,16 +213,6 @@ main = hspec $ do
       let d5 = rmFileFromVcs "europe" =<< d4
       let d6 = VCSCommands.log "europe" =<< d5
       d6 `shouldBe` Left (FileNotFound "europe")
---    it "file in subdir" $ do
---      d0 <- startDirectory
---      let file = "dogs/woof"
---      let d1 = rewriteFile d0 file "sobakens"
---      let d2 = add file =<< d1
---      let d3 = (\d -> append d file ", ur cute") =<< d2
---      let d4 = commit file =<< d3
---      let d5 = rmFileFromVcs file =<< d4
---      let d6 = VCSCommands.log file =<< d5
---      d6 `shouldBe` Right "todo"
 
   describe "show revisions" $ do
     it "success" $ do
@@ -292,15 +247,6 @@ main = hspec $ do
       let d4 = commit "anotherFile" =<< d3
       let d5 = showRevision "anotherFile" (-133) =<< d4
       d5 `shouldBe` Left (WrongRevisionIndex "anotherFile")
---    it "file in subdir" $ do
---      d0 <- startDirectory
---      let file = "cats/meow"
---      let d1 = rewriteFile d0 file "S-cala"
---      let d2 = add file =<< d1
---      let d3 = (\d -> append d file "S-uicide") =<< d2
---      let d4 = commit file =<< d3
---      let d5 = showRevision file (-133) =<< d4
---      d5 `shouldBe` Right "todo"
 
   describe "vcs composition" $ do
     it "add -> rewrite -> commit -> log" $ do
@@ -353,6 +299,3 @@ main = hspec $ do
       let both  = merge "lala" 1 2 MSBoth  =<< d4
       let bothLog = VCSCommands.log "lala" =<< both
       bothLog  `shouldBe` Right "\n### 1: \nhello\n### 2: \nhello world\n### 3: \nhello world"
-
--- TODO: init ??
--- TODO: history
