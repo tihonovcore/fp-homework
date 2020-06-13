@@ -2,24 +2,31 @@
 
 module Task2 where
 
-import GHC.Conc (TVar, atomically, newTVar, readTVar, STM, writeTVar)
+import Control.Monad (when)
 import Data.Hashable (Hashable(..))
+import Data.Maybe (isJust)
+import GHC.Conc (TVar, atomically, newTVar, readTVar, STM, writeTVar)
 
 type Element k v = Maybe (k, v)
 
-data ConcurrentHashTable k v = CHT { table :: TVar [Element k v] }
+newtype ConcurrentHashTable k v = CHT { table :: TVar [Element k v] }
+
+-- | Internal support class, uses for understanding
+-- next position in array by modulo of array size
+data Position = Position { startPos :: Int, currPos :: Int, size :: Int }
 
 startSize :: Int
 startSize = 4
 
---TODO: docs
+-- | Create new concurrent hash table
 newCHT :: IO (ConcurrentHashTable k v)
 newCHT = atomically $ do
   let tableContent = replicate startSize Nothing
   newTable <- newTVar tableContent
   return $ CHT newTable
 
---TODO: docs
+-- | Get value by key and concurrent hash table.
+-- If there is not value with specified key returns Nothing.
 getCHT :: forall k v . (Hashable k, Eq k, Eq v) => k -> ConcurrentHashTable k v -> IO (Maybe v)
 getCHT key cht = atomically $ do
   elems <- readTVar $ table cht
@@ -30,7 +37,7 @@ getCHT key cht = atomically $ do
     findElement :: Position -> [Element k v] -> STM (Maybe v)
     findElement position list =
       case (!!) list (currPos position) of
-        Nothing      -> return Nothing -- element not found
+        Nothing      -> return Nothing
         Just element -> if fst element == key
                         then return $ Just (snd element)
                         else case nextIndex position of
@@ -44,21 +51,20 @@ getCHT key cht = atomically $ do
                  else startPos p
       in if next == startPos p then Nothing else Just next
 
---TODO: docs
+-- | Put value by key into concurrent hash table.
+-- Value rewrites, if table already has value with
+-- specified key.
+-- Table spend O(n) space, where n - number of elements.
 putCHT :: forall k v . (Hashable k, Eq k, Eq v) => k -> v -> ConcurrentHashTable k v -> IO ()
 putCHT key value cht = atomically $ do
   elems <- readTVar $ table cht
   let len = length elems
   let pos = hash key `mod` len
   putElement key value (Position pos pos len) elems
-  
+
   updatedElems <- readTVar $ table cht
-  let realObjectCount = foldr (\o a -> case o of Nothing  -> a
-                                                 (Just _) -> a + 1) 0 updatedElems
-  
-  if realObjectCount * 4 `div` 3 >= len
-  then rehash updatedElems (len * 2)
-  else return ()
+  let realObjectCount = length $ filter isJust updatedElems
+  when (realObjectCount * 4 `div` 3 >= len) $ rehash updatedElems (len * 2)
   where
     putElement :: k -> v -> Position -> [Element k v] -> STM ()
     putElement currKey currValue position list =
@@ -70,7 +76,7 @@ putCHT key value cht = atomically $ do
                           Nothing -> return ()
                           Just np -> putElement currKey currValue np list
     
-    nextPos :: Position -> Maybe Position --TODO: common?
+    nextPos :: Position -> Maybe Position
     nextPos p = 
       let next = if currPos p + 1 == size p
                  then 0
@@ -81,40 +87,29 @@ putCHT key value cht = atomically $ do
     set currKey currValue position list = setImpl list (currPos position)
       where
         setImpl :: [Element k v] -> Int -> [Element k v]
-        setImpl []       _             = error "alalal" --TODO: readable message
+        setImpl []       _             = error "Internal error: hash great then array size"
         setImpl (x : xs) i | i == 0    = Just (currKey, currValue) : xs
                            | i >  0    = x : setImpl xs (i - 1)
-                           | otherwise = error "lalala" --TODO: readable message
-    
+                           | otherwise = error "Internal error: negative hash"
+
     rehash :: [Element k v] -> Int -> STM ()
-    rehash oldTable newSize = do 
+    rehash oldTable newSize = do
       let newTable = replicate newSize Nothing
       writeTVar (table cht) newTable
       moveElements oldTable newSize
-    
+
     moveElements :: [Element k v] -> Int -> STM ()
     moveElements [] _ = return ()
-    moveElements (Nothing : xs) sizeee = moveElements xs sizeee  --TODO: rename `sizeee`
-    moveElements ((Just (currKey, currValue)) : xs) sizeee = do
+    moveElements (Nothing : xs) newSize = moveElements xs newSize
+    moveElements ((Just (currKey, currValue)) : xs) newSize = do
       elems <- readTVar $ table cht
-      let pos  = hash currKey `mod` sizeee
-      putElement currKey currValue (Position pos pos sizeee) elems -- TODO: rename(?) `elem` -> `elements` everywhere
-      
-      moveElements xs sizeee
+      let pos  = hash currKey `mod` newSize
+      putElement currKey currValue (Position pos pos newSize) elems
 
---TODO: docs
+      moveElements xs newSize
+
+-- | Returns count elements in table.
 sizeCHT :: forall k v . ConcurrentHashTable k v -> IO Int
 sizeCHT cht = atomically $ do
   elems <- readTVar $ table cht
-  return $ foldr isJust 0 elems
-  where
-    isJust :: Element k v -> Int -> Int
-    isJust Nothing x = x
-    isJust (Just _) x = x + 1
-
---TODO: remove
-foo :: IO (ConcurrentHashTable String String)
-foo = newCHT
-
---TODO: docs
-data Position = Position { startPos :: Int, currPos :: Int, size :: Int }
+  return $ length $ filter isJust elems

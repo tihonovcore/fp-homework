@@ -1,8 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Task1 where
 
---import Debug.Trace (traceShowId)
-
 -- | Representation of two-dimensional point
 data Point = Point
            { x :: !Int

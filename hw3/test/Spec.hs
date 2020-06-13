@@ -1,9 +1,10 @@
 import Task1
 import Task2
 
-import Test.Hspec
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Monad.List (forM_, void)
 import Data.Maybe (fromMaybe)
-import Control.Monad.List (forM_)
+import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
@@ -109,3 +110,17 @@ main = hspec $ do
       let keys = map (100 -) values
       let mappingIsOk = foldl (\a (l, r) -> a && l == r) True (zip nums keys)
       mappingIsOk `shouldBe` True
+
+    it "parallel" $ do
+     cht <- newCHT :: IO (ConcurrentHashTable Int Int)
+     void (mapConcurrently (action cht) [1 .. 100])
+     void (mapConcurrently (action cht) [1 .. 100])
+     sz <- sizeCHT cht
+     sz `shouldBe` 190
+     where
+       action :: ConcurrentHashTable Int Int -> Int -> IO ()
+       action cht n = do
+         e <- getCHT n cht
+         case e of
+           Nothing -> putCHT n (n * n) cht
+           Just  _ -> putCHT (n * n) n cht
