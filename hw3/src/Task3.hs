@@ -20,16 +20,27 @@ newtype Then t = Then (Expression t)
 newtype Else t = Else (Expression t)
 
 data Expression a where
-  Number  :: Int -> Expression Int
+  Int32   :: Int -> Expression Int
   Boolean :: Bool -> Expression Bool
   Str     :: String -> Expression String
   Dbl     :: Double -> Expression Double
 
-  --TODO: functions
+
+  Fun     :: (Expression t -> Expression k)
+          -> ((Expression t -> Expression k) -> Expression ()) 
+          -> Expression ()
+  Fun2    :: (Expression t1 -> Expression t2 -> Expression k) 
+          -> ((Expression t1 -> Expression t2 -> Expression k) -> Expression ()) 
+          -> Expression ()
   
-  Plus    :: Expression Int  -> Expression Int  -> Expression Int
-  Gt      :: Expression Int  -> Expression Int  -> Expression Bool
-  And     :: Expression Bool -> Expression Bool -> Expression Bool
+  Plus    :: Expression Int    -> Expression Int    -> Expression Int
+  Subs    :: Expression Int    -> Expression Int    -> Expression Int
+  Mult    :: Expression Int    -> Expression Int    -> Expression Int
+  Div     :: Expression Int    -> Expression Int    -> Expression Int
+  Mod     :: Expression Int    -> Expression Int    -> Expression Int
+  Gt      :: Ord t => Expression t    -> Expression t    -> Expression Bool
+  And     :: Expression Bool   -> Expression Bool   -> Expression Bool
+  Conc    :: Expression String -> Expression String -> Expression String
   
   If      :: Expression Bool -> Then t -> Else t -> Expression t
   While   :: Expression Bool -> Expression () -> Expression ()
@@ -45,14 +56,22 @@ data Expression a where
   End :: Expression ()
 
 interpret :: Expression a -> IO a
-interpret (Number  v) = return v
+interpret (Int32   v) = return v
 interpret (Boolean v) = return v
 interpret (Dbl     v) = return v
 interpret (Str     v) = return v
 
+interpret (Fun  f scope) = interpret $ scope f
+interpret (Fun2 f scope) = interpret $ scope f
+
 interpret (Plus l r) = interpretBinOp l r (Prelude.+)
+interpret (Subs l r) = interpretBinOp l r (Prelude.-)
+interpret (Mult l r) = interpretBinOp l r (Prelude.*)
+interpret (Div  l r) = interpretBinOp l r Prelude.div
+interpret (Mod  l r) = interpretBinOp l r Prelude.mod
 interpret (Gt   l r) = interpretBinOp l r (Prelude.>)
 interpret (And  l r) = interpretBinOp l r (Prelude.&&)
+interpret (Conc l r) = interpretBinOp l r (Prelude.++)
 
 interpret (If cond (Then t) (Else e)) = do
   c <- interpret cond
@@ -93,14 +112,19 @@ interpretBinOp l r op = do
 -- x = 100
 -- y = 333
 -- 2 * x + y --> 2 * 100 + 333
-unbox :: Expression a -> IO (Expression a) -- TODO unbox остального
-unbox x@(Number  _) = return x
+unbox :: Expression a -> IO (Expression a)
+unbox x@(Int32  _) = return x
 unbox x@(Boolean _) = return x
 unbox x@(Str     _) = return x
 unbox x@(Dbl     _) = return x
 unbox (Plus l r) = unboxBinOp l r Plus
+unbox (Subs l r) = unboxBinOp l r Subs
+unbox (Mult l r) = unboxBinOp l r Mult
+unbox (Div  l r) = unboxBinOp l r Div
+unbox (Mod  l r) = unboxBinOp l r Mod
 unbox (Gt   l r) = unboxBinOp l r Gt
 unbox (And  l r) = unboxBinOp l r And
+unbox (Conc l r) = unboxBinOp l r Conc
 unbox (IOVariable _ io) = readIORef io
 unbox _ = error "internal error"
 
@@ -118,38 +142,7 @@ infix 8 @=
 (@=) :: Expression t -> Expression t -> Expression ()
 (@=) = Apply
 
-bar :: Expression ()
-bar =
-      Var (\a -> 
-        a @= Number 2018 #
-        Print (a `Plus` Number 10)
-      ) #
-      Var (\x ->
-        x @= Number (-10) #
---        While (x `Gt` (x `Plus` x)) ( x @= x `Plus` Number 1 ) #
-        Var (\y ->
-          y @= x #
-          Print y
-        ) #
-        End
-      ) #
-      Var (\y ->
-        y @= Number 0 #
-        While (Number 5 `Gt` y) (
-          Var (\x ->
-            (If   $ x `Gt` y)
-            (Then $ Print  y)
-            (Else $ Print  x) #
-            x @= y `Plus` Number 1 #
-            y @= x
---            Print y
-          )
-        ) #
---        y @= y `And` Boolean True #
-        End
-      ) #
---      While (Boolean True) (Number 2 `Plus` Number 4) #
-      End
+-- TODO: override + % etc
 
 -- | Default values for primitive types
 defValue :: Typeable t => (Expression t -> Expression k) -> IO (Expression t)
@@ -161,7 +154,7 @@ defValue (_ :: Expression t -> Expression k) = do
     defInt :: Maybe (Expression t)
     defInt = do
       Refl <- eqT @t @Int
-      pure $ Number 0
+      pure $ Int32 0
 
     defBool :: Maybe (Expression t)
     defBool = do

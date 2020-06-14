@@ -18,14 +18,14 @@ translateToJS = translate 0
   where
     -- TODO: needs to increment var index
     translate :: Int -> Expression a -> String
-    translate _ (Number n) = show n
+    translate _ (Int32 n) = show n
     translate _ (Boolean   n) = show n
     translate i (Plus l r) = translate i l <> " + "  <> translate i r
     translate i (Gt   l r) = translate i l <> " > "  <> translate i r
     translate i (And  l r) = translate i l <> " && " <> translate i r
     translate _ (RRVariable name _) = name
-    translate i (Var  f) = 
-      let dv = defValue4 i f in 
+    translate i (Var  f) =
+      let dv = defValue4 i f in
         case dv of
           (RRVariable name value) -> "var " <> name <> " = " <> translate i value <> "\n" <> translate (i + 1) (f dv)
           _                       -> error "impossible"
@@ -45,7 +45,7 @@ defValue4 index (_ :: Expression t -> Expression k) =
     defInt :: Maybe (Expression t)
     defInt = do
       Refl <- eqT @t @Int
-      pure $ Number 0
+      pure $ Int32 0
 
     defBool :: Maybe (Expression t)
     defBool = do
