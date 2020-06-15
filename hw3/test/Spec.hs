@@ -39,6 +39,26 @@ main = hspec $ do
       let p  = fmap (\(l, r) -> Point l r) (zip xs ys)
       perimeter p `shouldBe` 12.0
 
+    it "doubleArea" $ do
+      let xs = [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0] :: [Int]
+      let ys = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 2, 2, 3, 3, 4, 4, 3, 3, 2, 2] :: [Int]
+      let p  = fmap (\(l, r) -> Point l r) (zip xs ys)
+      doubleArea p `shouldBe` 24
+
+    it "perimeter of strange figure" $ do
+      let xs = [1, 3, 5, 5, 4, 5, 6, 7, 8, 9, 5, 6, 3] :: [Int]
+      let ys = [1, 2, 1, 2, 4, 3, 1, 4, 2, 4, 6, 4, 5] :: [Int]
+      let p  = fmap (\(l, r) -> Point l r) (zip xs ys)
+      
+      let eps = 0.000001
+      (perimeter p - 33.3355166352) < eps `shouldBe` True
+
+    it "doubleArea of strange figure" $ do
+      let xs = [1, 3, 5, 5, 4, 5, 6, 7, 8, 9, 5, 6, 3] :: [Int]
+      let ys = [1, 2, 1, 2, 4, 3, 1, 4, 2, 4, 6, 4, 5] :: [Int]
+      let p  = fmap (\(l, r) -> Point l r) (zip xs ys)
+      doubleArea p `shouldBe` 35
+
   describe "Task2.sequetially" $ do
     it "different keys" $ do
       cht <- newCHT :: IO (ConcurrentHashTable String String)

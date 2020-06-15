@@ -35,12 +35,12 @@ perimeter (first : list) = countPerimeter 0 first list
   where
     countPerimeter :: Double -> Point -> [Point] -> Double
     countPerimeter !accum prev (p : other) = countPerimeter (accum + size (minus prev p)) p other
-    countPerimeter !accum prev []           = accum + size (minus first prev)
+    countPerimeter !accum prev []          = accum + size (minus first prev)
 
 -- | Evaluate doubled area of polygon without self-intersections strictly
 doubleArea :: [Point] -> Int
 doubleArea []          = 0
-doubleArea (first : list) = evalDoubleArea 0 first list
+doubleArea (first : list) = negate $ evalDoubleArea 0 first list
   where
     evalDoubleArea :: Int -> Point -> [Point] -> Int
     evalDoubleArea !accum prev (p : other) = evalDoubleArea (accum + trapezoidDoubleArea prev p) p other
