@@ -13,41 +13,77 @@ import Data.Data (Typeable, (:~:) (..), eqT)
 import Data.Maybe (fromMaybe)
 import Control.Applicative ((<|>))
 
-translateToJS :: Expression a -> String
-translateToJS = translate 0
+translateToJs :: Expression a -> IO String
+translateToJs expr = do
+  index <- newIORef 0
+  translate index expr
   where
-    -- TODO: needs to increment var index
-    translate :: Int -> Expression a -> String
-    translate _ (Int32 n) = show n
-    translate _ (Boolean   n) = show n
-    translate i (Plus l r) = translate i l <> " + "  <> translate i r
-    translate i (Gt   l r) = translate i l <> " > "  <> translate i r
-    translate i (And  l r) = translate i l <> " && " <> translate i r
-    translate _ (RRVariable name _) = name
-    translate i (Var  f) =
-      let dv = defValue4 i f in
-        case dv of
-          (RRVariable name value) -> "var " <> name <> " = " <> translate i value <> "\n" <> translate (i + 1) (f dv)
-          _                       -> error "impossible"
-    translate i (While  c b) = "while (" <> translate i c <> ") {\n" <> translate i b <> "\n}\n"
-    translate i (Apply (RRVariable name _) v) = name <> " = " <> translate i v
-    translate i (Apply name value) = translate i name <> " = " <> translate i value --TODO: now `x * y = 3` is ok!
-    translate i (Print e) = "console.log(" <> translate i e <> ")"
-    translate _ End = ""
-    translate i  (Seq l r) = translate i l <> "\n" <> translate i r
-    
+    translate :: IORef Int -> Expression a -> IO String
+    translate _ (Int32   v) = return $ show v
+    translate _ (Boolean v) = return $ show v
+    translate _ (Str     v) = return $ show v
+    translate _ (Dbl     v) = return $ show v
 
-defValue4 :: Typeable t => Int -> (Expression t -> Expression k) -> Expression t
-defValue4 index (_ :: Expression t -> Expression k) =
-  let res = fromMaybe undefined $ defInt <|> defBool
-  in  RRVariable ("var" ++ show index) res
-  where
-    defInt :: Maybe (Expression t)
-    defInt = do
-      Refl <- eqT @t @Int
-      pure $ Int32 0
+--    -- TODO: return in body?? (or by default returns last line?)
+--    -- TODO: needs smth like `Variable` for printing functionName on call-site owtherwise it will inline
+----    translate i (Fun  f scope) =
+----      let dv = defValue4 i f in
+----        case dv of
+----          (RRVariable name _) -> "function func" <> show (i + 1) <> " (" <> name <> ") {\n" <>
+----                                 translate (i + 1) (f dv) <>
+----                                 "\n}\n" <> translate (i + 1) (scope f)
+----          _                   -> error "impossible"
+----      "function func" <> show i <> " (var" <> show (i + 1) <> ") {\n"
+--
+----    translate i (Fun2 body scope) =
 
-    defBool :: Maybe (Expression t)
-    defBool = do
-      Refl <- eqT @t @Bool
-      pure $ Boolean False
+    translate i (Plus l r) = translateBinOp i l r " + "
+    translate i (Subs l r) = translateBinOp i l r " - "
+    translate i (Mult l r) = translateBinOp i l r " * "
+    translate i (Mod  l r) = translateBinOp i l r " % "
+    translate i (Gt   l r) = translateBinOp i l r " > "
+    translate i (And  l r) = translateBinOp i l r " && "
+    translate i (Conc l r) = translateBinOp i l r " + "
+
+    translate i (If c (Then t) (Else e)) = do
+      cond <- translate i c
+      thenBranch <- translate i t
+      elseBranch <- translate i e
+      return $ "if (" <> cond <> ") " <> thenBranch <> "\nelse " <> elseBranch
+    translate i (While c b) = do
+      cond <- translate i c
+      body <- translate i b
+      return $ "while (" <> cond <> ") {\n" <> body <> "\n}\n"
+
+    translate _ (Variable name _) = return name
+    translate i (Var  f) = do
+      dv <- defaultValue i f
+      case dv of
+        (Variable name value) -> do
+          val <- readIORef value >>= translate i
+          scope <- translate i (f dv)
+          return $ "var " <> name <> " = " <> val <> "\n" <> scope
+        _ -> error "impsbl"
+
+    translate i (Apply (Variable name _) v) = do
+      right <- translate i v
+      return $ name <> " = " <> right
+    translate i (Apply name value) = do
+      left  <- translate i name
+      right <- translate i value
+      return $ left <> " = " <> right --TODO: now `x * y = 3` is ok!!!
+    translate i (Print e) = do
+      arg <- translate i e
+      return $ "console.log(" <> arg <> ")"
+
+    translate i (Seq l r) = do
+      left <- translate i l
+      right <- translate i r
+      return $ left <> "\n" <> right
+    translate _ End = return ""
+
+    translateBinOp :: IORef Int -> Expression a -> Expression a -> String -> IO String
+    translateBinOp i l r op = do
+      left  <- translate i l
+      right <- translate i r
+      return $ left <> op <> right

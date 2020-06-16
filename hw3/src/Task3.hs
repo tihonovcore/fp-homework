@@ -25,18 +25,18 @@ data Expression a where
   Str     :: String -> Expression String
   Dbl     :: Double -> Expression Double
 
-
-  Fun     :: (Expression t -> Expression k)
+  Fun     :: Typeable t
+          => (Expression t -> Expression k)
           -> ((Expression t -> Expression k) -> Expression ()) 
           -> Expression ()
-  Fun2    :: (Expression t1 -> Expression t2 -> Expression k) 
+  Fun2    :: (Typeable t1, Typeable t2)
+          => (Expression t1 -> Expression t2 -> Expression k) 
           -> ((Expression t1 -> Expression t2 -> Expression k) -> Expression ()) 
           -> Expression ()
   
   Plus    :: Expression Int    -> Expression Int    -> Expression Int
   Subs    :: Expression Int    -> Expression Int    -> Expression Int
   Mult    :: Expression Int    -> Expression Int    -> Expression Int
-  Div     :: Expression Int    -> Expression Int    -> Expression Int
   Mod     :: Expression Int    -> Expression Int    -> Expression Int
   Gt      :: Ord t => Expression t    -> Expression t    -> Expression Bool
   And     :: Expression Bool   -> Expression Bool   -> Expression Bool
@@ -45,8 +45,7 @@ data Expression a where
   If      :: Expression Bool -> Then t -> Else t -> Expression t
   While   :: Expression Bool -> Expression () -> Expression ()
   
-  IOVariable :: Typeable t => String -> IORef (Expression t) -> Expression t
-  RRVariable :: Typeable t => String -> Expression t -> Expression t
+  Variable :: Typeable t => String -> IORef (Expression t) -> Expression t
   Var        :: Typeable t => (Expression t -> Expression ()) -> Expression ()
   
   Apply  :: Expression t -> Expression t -> Expression () 
@@ -67,7 +66,6 @@ interpret (Fun2 f scope) = interpret $ scope f
 interpret (Plus l r) = interpretBinOp l r (Prelude.+)
 interpret (Subs l r) = interpretBinOp l r (Prelude.-)
 interpret (Mult l r) = interpretBinOp l r (Prelude.*)
-interpret (Div  l r) = interpretBinOp l r Prelude.div
 interpret (Mod  l r) = interpretBinOp l r Prelude.mod
 interpret (Gt   l r) = interpretBinOp l r (Prelude.>)
 interpret (And  l r) = interpretBinOp l r (Prelude.&&)
@@ -80,15 +78,15 @@ interpret (While cond action) = do
   c <- interpret cond
   when c $ interpret action >> interpret (While cond action)
 
-interpret (IOVariable _ e) = do
+interpret (Variable _ e) = do
   value <- readIORef e
   interpret value
-interpret (RRVariable _ _) = error "impossible"
 interpret (Var    f) = do
-  dv <- defValue f
+  fake <- newIORef 0
+  dv   <- defaultValue fake f
   interpret $ f dv
 
-interpret (Apply (IOVariable _ value) boxedNewValue) = do
+interpret (Apply (Variable _ value) boxedNewValue) = do
   newValue <- unbox boxedNewValue
   writeIORef value newValue
 interpret (Apply _ _) = error "impossible"
@@ -120,12 +118,11 @@ unbox x@(Dbl     _) = return x
 unbox (Plus l r) = unboxBinOp l r Plus
 unbox (Subs l r) = unboxBinOp l r Subs
 unbox (Mult l r) = unboxBinOp l r Mult
-unbox (Div  l r) = unboxBinOp l r Div
 unbox (Mod  l r) = unboxBinOp l r Mod
 unbox (Gt   l r) = unboxBinOp l r Gt
 unbox (And  l r) = unboxBinOp l r And
 unbox (Conc l r) = unboxBinOp l r Conc
-unbox (IOVariable _ io) = readIORef io
+unbox (Variable _ io) = readIORef io
 unbox _ = error "internal error"
 
 unboxBinOp :: Expression t -> Expression t -> (Expression t -> Expression t -> Expression r) -> IO (Expression r)
@@ -145,11 +142,12 @@ infix 8 @=
 -- TODO: override + % etc
 
 -- | Default values for primitive types
-defValue :: Typeable t => (Expression t -> Expression k) -> IO (Expression t)
-defValue (_ :: Expression t -> Expression k) = do
-  let res = fromMaybe undefined $ defInt <|> defBool <|> defStr <|> defDbl
-  ref <- newIORef res
-  return $ IOVariable "v0" ref
+defaultValue :: Typeable t => IORef Int -> (Expression t -> Expression k) -> IO (Expression t)
+defaultValue index (_ :: Expression t -> Expression k) = do
+  res <- newIORef $ fromMaybe undefined $ defInt <|> defBool <|> defStr <|> defDbl
+  currIndex <- readIORef index
+  writeIORef index (currIndex + 1)
+  return $ Variable ("var" <> show currIndex) res
   where
     defInt :: Maybe (Expression t)
     defInt = do
