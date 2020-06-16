@@ -13,9 +13,6 @@ import Data.Maybe (fromMaybe)
 import Data.IORef (newIORef, IORef, readIORef, writeIORef)
 import Control.Monad (when)
 
-data SomeE where
-  SomeE :: Expression t -> SomeE
-
 newtype Then t = Then (Expression t)
 newtype Else t = Else (Expression t)
 
@@ -30,11 +27,11 @@ data Expression a where
 
   Fun     :: Typeable t
           => (Expression t -> Expression k)
-          -> (Runnable t k -> Expression ()) 
+          -> (Runnable t k -> Expression ())
           -> Expression ()
   Fun2    :: (Typeable t1, Typeable t2)
           => (Expression t1 -> Expression t2 -> Expression k) 
-          -> (Runnable2 t1 t2 k -> Expression ()) 
+          -> (Runnable2 t1 t2 k -> Expression ())
           -> Expression ()
   Call    :: Runnable  t     k -> Expression t                   -> Expression k 
   Call2   :: Runnable2 t1 t2 k -> Expression t1 -> Expression t2 -> Expression k 
@@ -43,7 +40,7 @@ data Expression a where
   Subs    :: Expression Int    -> Expression Int    -> Expression Int
   Mult    :: Expression Int    -> Expression Int    -> Expression Int
   Mod     :: Expression Int    -> Expression Int    -> Expression Int
-  Gt      :: Ord t => Expression t    -> Expression t    -> Expression Bool
+  Gt      :: Expression Int    -> Expression Int    -> Expression Bool
   And     :: Expression Bool   -> Expression Bool   -> Expression Bool
   Conc    :: Expression String -> Expression String -> Expression String
   

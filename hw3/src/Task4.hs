@@ -24,10 +24,10 @@ translateToJs expr = do
       index <- readIORef i
       writeIORef i (index + 1)
       let funcName = "func" <> show index
-      
+
       var@(Variable varName _) <- defaultValue i f
       body <- translateReturn i (f var)
-      
+
       scope <- translate i (s (Runnable funcName f))
       return $ "function " <> funcName <> "(" <> varName <> ") {\n" <> body <> "\n}\n" <> scope
 
@@ -35,11 +35,11 @@ translateToJs expr = do
       index <- readIORef i
       writeIORef i (index + 1)
       let funcName = "func" <> show index
-      
+
       var1@(Variable var1Name _) <- defaultValue i f
       var2@(Variable var2Name _) <- defaultValue i (flip f)
       body <- translateReturn i (f var1 var2)
-      
+
       scope <- translate i (s (Runnable2 funcName f))
       return $ "function " <> funcName <> "(" <> var1Name <> ", " <> var2Name <> ") {\n" <> body <> "\n}\n" <> scope
 
@@ -85,7 +85,7 @@ translateToJs expr = do
     translate i (Apply name value) = do
       left  <- translate i name
       right <- translate i value
-      return $ left <> " = " <> right --TODO: now `x * y = 3` is ok!!!
+      return $ left <> " = " <> right
     translate i (Print e) = do
       arg <- translate i e
       return $ "console.log(" <> arg <> ")"

@@ -57,33 +57,4 @@ funcFunc =
     )
     )
   )
-
--- TODO: now we cant use `div` for Double
---sqrtMe :: Expression ()
---sqrtMe =
---  Var (\x ->
---  Var (\i ->
---  Var (\l ->
---  Var (\m ->
---  Var (\r ->
---    x @= Dbl 3025 #
---    i @= Int32 100 #
---    l @= Dbl (10.3 / 3.9) #
---    m @= Dbl 0 #
---    r @= x #
---
---    While (Int32 100 `Gt` i) (
---      m @= (l `Plus` r) `Div` Dbl 2 #
---      (If $ (m `Mult` m) `Gt` x)
---      (Then $ r @= m)
---      (Else $ l @= m) #
---      
---      i @= i `Plus` Int32 1
---    ) #
---    
---    Print r
---  )
---  )
---  )
---  )
---  )
+  
