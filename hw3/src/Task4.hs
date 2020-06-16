@@ -3,15 +3,11 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Task4 where
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Task3
-import Data.Data (Typeable, (:~:) (..), eqT)
-import Data.Maybe (fromMaybe)
-import Control.Applicative ((<|>))
 
 translateToJs :: Expression a -> IO String
 translateToJs expr = do
@@ -24,18 +20,36 @@ translateToJs expr = do
     translate _ (Str     v) = return $ show v
     translate _ (Dbl     v) = return $ show v
 
---    -- TODO: return in body?? (or by default returns last line?)
---    -- TODO: needs smth like `Variable` for printing functionName on call-site owtherwise it will inline
-----    translate i (Fun  f scope) =
-----      let dv = defValue4 i f in
-----        case dv of
-----          (RRVariable name _) -> "function func" <> show (i + 1) <> " (" <> name <> ") {\n" <>
-----                                 translate (i + 1) (f dv) <>
-----                                 "\n}\n" <> translate (i + 1) (scope f)
-----          _                   -> error "impossible"
-----      "function func" <> show i <> " (var" <> show (i + 1) <> ") {\n"
---
-----    translate i (Fun2 body scope) =
+    translate i (Fun f s) = do
+      index <- readIORef i
+      writeIORef i (index + 1)
+      let funcName = "func" <> show index
+      
+      var@(Variable varName _) <- defaultValue i f
+      body <- translateReturn i (f var)
+      
+      scope <- translate i (s (Runnable funcName f))
+      return $ "function " <> funcName <> "(" <> varName <> ") {\n" <> body <> "\n}\n" <> scope
+
+    translate i (Fun2 f s) = do
+      index <- readIORef i
+      writeIORef i (index + 1)
+      let funcName = "func" <> show index
+      
+      var1@(Variable var1Name _) <- defaultValue i f
+      var2@(Variable var2Name _) <- defaultValue i (flip f)
+      body <- translateReturn i (f var1 var2)
+      
+      scope <- translate i (s (Runnable2 funcName f))
+      return $ "function " <> funcName <> "(" <> var1Name <> ", " <> var2Name <> ") {\n" <> body <> "\n}\n" <> scope
+
+    translate i (Call  (Runnable name _) a     ) = do
+      arg <- translate i a
+      return $ name <> "(" <> arg <> ")"
+    translate i (Call2 (Runnable2 name _) a1 a2) = do
+      arg1 <- translate i a1
+      arg2 <- translate i a2
+      return $ name <> "(" <> arg1 <> ", " <> arg2 <> ")"
 
     translate i (Plus l r) = translateBinOp i l r " + "
     translate i (Subs l r) = translateBinOp i l r " - "
@@ -87,3 +101,10 @@ translateToJs expr = do
       left  <- translate i l
       right <- translate i r
       return $ left <> op <> right
+
+    translateReturn :: IORef Int -> Expression a -> IO String
+    translateReturn i (Seq l r) = do
+      left  <- translate i l
+      right <- translateReturn i r
+      return $ left <> "\n" <> right
+    translateReturn i other     = (++) "return " <$> translate i other

@@ -45,7 +45,7 @@ funcFunc =
   Fun (\x -> x `Mult` x) (\sq ->
     Var (\a ->
       a @= Int32 16 #
-      Print (sq a)   
+      Print (Call sq a)  
     )
   ) #
   Fun2 (\x y -> (x `Mult` x) `Plus` (y `Mult` y)) (\sqLen ->
@@ -53,7 +53,7 @@ funcFunc =
     Var (\y ->
       x @= Int32 3 #
       y @= Int32 4 #
-      Print (sqLen x y)
+      Print (Call2 sqLen x y)
     )
     )
   )

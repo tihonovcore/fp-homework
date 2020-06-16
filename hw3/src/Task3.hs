@@ -19,6 +19,9 @@ data SomeE where
 newtype Then t = Then (Expression t)
 newtype Else t = Else (Expression t)
 
+data Runnable  t     k = Runnable  String (Expression t                   -> Expression k)
+data Runnable2 t1 t2 k = Runnable2 String (Expression t1 -> Expression t2 -> Expression k)
+
 data Expression a where
   Int32   :: Int -> Expression Int
   Boolean :: Bool -> Expression Bool
@@ -27,12 +30,14 @@ data Expression a where
 
   Fun     :: Typeable t
           => (Expression t -> Expression k)
-          -> ((Expression t -> Expression k) -> Expression ()) 
+          -> (Runnable t k -> Expression ()) 
           -> Expression ()
   Fun2    :: (Typeable t1, Typeable t2)
           => (Expression t1 -> Expression t2 -> Expression k) 
-          -> ((Expression t1 -> Expression t2 -> Expression k) -> Expression ()) 
+          -> (Runnable2 t1 t2 k -> Expression ()) 
           -> Expression ()
+  Call    :: Runnable  t     k -> Expression t                   -> Expression k 
+  Call2   :: Runnable2 t1 t2 k -> Expression t1 -> Expression t2 -> Expression k 
   
   Plus    :: Expression Int    -> Expression Int    -> Expression Int
   Subs    :: Expression Int    -> Expression Int    -> Expression Int
@@ -46,7 +51,7 @@ data Expression a where
   While   :: Expression Bool -> Expression () -> Expression ()
   
   Variable :: Typeable t => String -> IORef (Expression t) -> Expression t
-  Var        :: Typeable t => (Expression t -> Expression ()) -> Expression ()
+  Var      :: Typeable t => (Expression t -> Expression ()) -> Expression ()
   
   Apply  :: Expression t -> Expression t -> Expression () 
   Print  :: Show t => Expression t -> Expression ()
@@ -60,8 +65,10 @@ interpret (Boolean v) = return v
 interpret (Dbl     v) = return v
 interpret (Str     v) = return v
 
-interpret (Fun  f scope) = interpret $ scope f
-interpret (Fun2 f scope) = interpret $ scope f
+interpret (Fun  f scope) = interpret $ scope (Runnable  "fakeName" f)
+interpret (Fun2 f scope) = interpret $ scope (Runnable2 "fakeName" f)
+interpret (Call  (Runnable  _ f) a    ) = interpret $ f a
+interpret (Call2 (Runnable2 _ f) a1 a2) = interpret $ f a1 a2
 
 interpret (Plus l r) = interpretBinOp l r (Prelude.+)
 interpret (Subs l r) = interpretBinOp l r (Prelude.-)
@@ -142,8 +149,8 @@ infix 8 @=
 -- TODO: override + % etc
 
 -- | Default values for primitive types
-defaultValue :: Typeable t => IORef Int -> (Expression t -> Expression k) -> IO (Expression t)
-defaultValue index (_ :: Expression t -> Expression k) = do
+defaultValue :: Typeable t => IORef Int -> (Expression t -> k) -> IO (Expression t)
+defaultValue index (_ :: Expression t -> k) = do
   res <- newIORef $ fromMaybe undefined $ defInt <|> defBool <|> defStr <|> defDbl
   currIndex <- readIORef index
   writeIORef index (currIndex + 1)
