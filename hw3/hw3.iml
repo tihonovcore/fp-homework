@@ -93,5 +93,6 @@
     <orderEntry type="library" name="monad-par-extras-0.3.3" level="project" />
     <orderEntry type="library" name="parallel-3.2.2.0" level="project" />
     <orderEntry type="library" name="cereal-0.5.8.1" level="project" />
+    <orderEntry type="library" name="microlens-0.4.10" level="project" />
   </component>
 </module>
