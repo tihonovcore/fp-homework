@@ -2,25 +2,49 @@ module Task8 where
 
 import ComonadUtils
 import Control.Comonad (Comonad(..))
+import System.Random (StdGen, newStdGen)
 
-data Person = Healthy | Infected | Recovered
+data Status = Healthy
+            | PassiveInfected
+            | ActiveInfected
+            | Recovered
+
+instance Show Status where
+  show Healthy         = " "
+  show PassiveInfected = "?"
+  show ActiveInfected  = "#"
+  show Recovered       = "@"
+
+data Person = Person
+  { status :: Status
+  , stdGen :: StdGen
+  , daysInStatus :: Int
+  }
 
 instance Show Person where
-  show Healthy   = " "
-  show Infected  = "#"
-  show Recovered = "@"
+  show p = show $ status p
 
-start :: Grid Person
-start = gridWrite Infected $ Grid (genericMove healthy healthy healthyLZ)
+writeStatus :: Status -> Grid Person -> Grid Person
+writeStatus s g = flip gridWrite g $ (gridRead g) { status = s }
+
+start :: IO (Grid Person)
+start = writeStatus PassiveInfected . Grid <$> (genericMove <$> healthy <*> healthy <*> healthyLZ)
   where
-    healthy :: ListZipper Person -> ListZipper Person
-    healthy = const healthyLZ
+    healthy :: IO (ListZipper Person -> ListZipper Person)
+    healthy = const <$> healthyLZ
 
-    healthyLZ :: ListZipper Person
-    healthyLZ = LZ healthyList Healthy healthyList
+    healthyLZ :: IO (ListZipper Person)
+    healthyLZ = LZ <$> healthyList <*> healthyPerson <*> healthyList
 
-    healthyList :: [Person]
-    healthyList = iterate (const Healthy) Healthy
+    healthyList :: IO [Person]
+    healthyList = do
+      hp <- healthyPerson
+      return $ iterate (const hp) hp
+
+    healthyPerson :: IO Person
+    healthyPerson = do
+      g <- newStdGen
+      return $ Person Healthy g 0
 
 neighbours :: [Grid Person -> Grid Person]
 neighbours = [left, right, up, down]
@@ -32,14 +56,14 @@ infectedNeighbours g = notHealthyCount $ map (\d -> extract $ d g) neighbours
     notHealthyCount = length . filter notHealthy
 
     notHealthy :: Person -> Bool
-    notHealthy p = case p of
+    notHealthy p = case status p of
                      Healthy -> False
                      _       -> True
 
 rule :: Grid Person -> Person
 rule g = case infectedNeighbours g of
            0 -> extract g
-           _ -> Infected
+           _ -> (extract g) { status = PassiveInfected } --TODO use rnd
 
 step :: Grid Person -> Grid Person
 step = extend rule
@@ -50,3 +74,14 @@ nStep n g | n <= 0    = g
 
 render :: Show a => Grid a -> String
 render = gridShowN 4 . gridShow
+
+runN :: Int -> IO ()
+runN n = do
+  s <- start
+  runImpl 0 s
+  where
+    runImpl :: Int -> Grid Person -> IO ()
+    runImpl k s | k == n    = return ()
+                | otherwise = do
+      putStrLn $ render s
+      runImpl (k + 1) (step s)
