@@ -2,7 +2,8 @@ module Task8 where
 
 import ComonadUtils
 import Control.Comonad (Comonad(..))
-import System.Random (StdGen, newStdGen)
+import System.Random (StdGen, newStdGen, random)
+import Control.Concurrent (threadDelay)
 
 data Status = Healthy
             | PassiveInfected
@@ -60,20 +61,49 @@ infectedNeighbours g = notHealthyCount $ map (\d -> extract $ d g) neighbours
                      Healthy -> False
                      _       -> True
 
+-- TODO: move as property
+infectionProbability :: Double
+infectionProbability = 0.3
+
+incubationPeriod :: Int
+incubationPeriod = 7
+
+daysWithSymptoms :: Int
+daysWithSymptoms = 10
+
+immunityDuration :: Int
+immunityDuration = 7  
+
+-- TODO: add trips
 rule :: Grid Person -> Person
-rule g = case infectedNeighbours g of
-           0 -> extract g
-           _ -> (extract g) { status = PassiveInfected } --TODO use rnd
+rule g = 
+  let person = gridRead g in
+  case status person of
+    Healthy         -> if infectedNeighbours g == 0 
+                       then person 
+                       else healthyRule
+    PassiveInfected -> if daysInStatus person + 1 == incubationPeriod -- TODO: commonize
+                       then person { status = ActiveInfected, daysInStatus = 0 }
+                       else person { daysInStatus = daysInStatus person + 1 }
+    ActiveInfected  -> if daysInStatus person + 1 == daysWithSymptoms
+                       then person { status = Recovered, daysInStatus = 0 }
+                       else person { daysInStatus = daysInStatus person + 1 }
+    Recovered       -> if daysInStatus person + 1 == immunityDuration
+                       then person { status = Healthy, daysInStatus = 0 }
+                       else person { daysInStatus = daysInStatus person + 1 }
+  where
+    healthyRule :: Person
+    healthyRule =
+      let (rv, gen) = (random :: StdGen -> (Double, StdGen)) $ stdGen (extract g) in
+        if rv < 1 - (1 - infectionProbability) * fromIntegral (infectedNeighbours g)
+        then Person PassiveInfected gen 0
+        else (extract g) { stdGen = gen }
 
 step :: Grid Person -> Grid Person
 step = extend rule
 
-nStep :: Int -> Grid Person -> Grid Person
-nStep n g | n <= 0    = g
-          | otherwise = nStep (n - 1) (step g)
-
 render :: Show a => Grid a -> String
-render = gridShowN 4 . gridShow
+render = gridShowN 10 . gridShow
 
 runN :: Int -> IO ()
 runN n = do
@@ -84,4 +114,5 @@ runN n = do
     runImpl k s | k == n    = return ()
                 | otherwise = do
       putStrLn $ render s
+      threadDelay 1000000
       runImpl (k + 1) (step s)
