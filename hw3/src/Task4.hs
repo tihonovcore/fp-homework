@@ -3,53 +3,81 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 
 module Task4 where
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import NeatInterpolation
+import Data.Text
 import Task3
 
-translateToJs :: Expression a -> IO String
+translateToJs :: Expression a -> IO Text
 translateToJs expr = do
   index <- newIORef 0
   translate index expr
   where
-    translate :: IORef Int -> Expression a -> IO String
-    translate _ (Int32   v) = return $ show v
-    translate _ (Boolean v) = return $ show v
-    translate _ (Str     v) = return $ show v
-    translate _ (Dbl     v) = return $ show v
+    packs :: Show a => a -> Text
+    packs = pack . show
+
+    translate :: IORef Int -> Expression a -> IO Text
+    translate _ (Int32   v) = return $ packs v
+    translate _ (Boolean v) = return $ packs v
+    translate _ (Str     v) = return $ packs v
+    translate _ (Dbl     v) = return $ packs v
 
     translate i (Fun f s) = do
+      var@(Variable unpackedVarName _) <- defaultValue i f
+
       index <- readIORef i
       writeIORef i (index + 1)
-      let funcName = "func" <> show index
 
-      var@(Variable varName _) <- defaultValue i f
-      body <- translateReturn i (f var)
+      let unpackedFuncName = "func" <> show index
+      let funcName = pack unpackedFuncName
+      let varName = pack unpackedVarName
 
-      scope <- translate i (s (Runnable funcName f))
-      return $ "function " <> funcName <> "(" <> varName <> ") {\n" <> body <> "\n}\n" <> scope
+      body  <- translateReturn i (f var)
+
+      scope <- translate i (s (Runnable unpackedFuncName f))
+      return [text|
+               function $funcName($varName) {
+                 $body
+               }
+               $scope
+             |]
 
     translate i (Fun2 f s) = do
+      var1@(Variable var1unpackedName _) <- defaultValue i f
+      var2@(Variable var2unpackedName _) <- defaultValue i (flip f)
+
       index <- readIORef i
       writeIORef i (index + 1)
-      let funcName = "func" <> show index
 
-      var1@(Variable var1Name _) <- defaultValue i f
-      var2@(Variable var2Name _) <- defaultValue i (flip f)
-      body <- translateReturn i (f var1 var2)
+      let unpackedFuncName = "func" <> show index
+      let funcName = pack unpackedFuncName
+      let var1Name = pack var1unpackedName
+      let var2Name = pack var2unpackedName
 
-      scope <- translate i (s (Runnable2 funcName f))
-      return $ "function " <> funcName <> "(" <> var1Name <> ", " <> var2Name <> ") {\n" <> body <> "\n}\n" <> scope
+      body  <- translateReturn i (f var1 var2)
 
-    translate i (Call  (Runnable name _) a     ) = do
+      scope <- translate i (s (Runnable2 unpackedFuncName f))
+      return [text|
+               function $funcName($var1Name, $var2Name) {
+                 $body
+               }
+               $scope
+             |]
+
+    translate i (Call  (Runnable unpackedName _) a     ) = do
+      let name = pack unpackedName
       arg <- translate i a
-      return $ name <> "(" <> arg <> ")"
-    translate i (Call2 (Runnable2 name _) a1 a2) = do
+      return [text|$name($arg)|]
+    translate i (Call2 (Runnable2 unpackedName _) a1 a2) = do
+      let name = pack unpackedName
       arg1 <- translate i a1
       arg2 <- translate i a2
-      return $ name <> "(" <> arg1 <> ", " <> arg2 <> ")"
+      return [text|$name($arg1, $arg2)|]
 
     translate i (Plus l r) = translateBinOp i l r " + "
     translate i (Subs l r) = translateBinOp i l r " - "
@@ -63,48 +91,63 @@ translateToJs expr = do
       cond <- translate i c
       thenBranch <- translate i t
       elseBranch <- translate i e
-      return $ "if (" <> cond <> ") " <> thenBranch <> "\nelse " <> elseBranch
+      return [text|
+               if ($cond) {
+                 $thenBranch
+               } else {
+                 $elseBranch
+               }
+             |]
     translate i (While c b) = do
       cond <- translate i c
       body <- translate i b
-      return $ "while (" <> cond <> ") {\n" <> body <> "\n}\n"
+      return [text|
+               while ($cond) {
+                 $body
+               }
+             |]
 
-    translate _ (Variable name _) = return name
+    translate _ (Variable name _) = return $ pack name
     translate i (Var  f) = do
       dv <- defaultValue i f
       case dv of
-        (Variable name value) -> do
+        (Variable unpackedName value) -> do
+          let name = pack unpackedName
           val <- readIORef value >>= translate i
           scope <- translate i (f dv)
-          return $ "var " <> name <> " = " <> val <> "\n" <> scope
+          return [text|
+                   var $name = $val
+                   $scope
+                 |]
         _ -> error "impsbl"
 
-    translate i (Apply (Variable name _) v) = do
+    translate i (Apply (Variable unpackedName _) v) = do
+      let name = pack unpackedName
       right <- translate i v
-      return $ name <> " = " <> right
+      return [text|$name = $right|]
     translate i (Apply name value) = do
       left  <- translate i name
       right <- translate i value
-      return $ left <> " = " <> right
+      return [text|$left = $right|]
     translate i (Print e) = do
       arg <- translate i e
-      return $ "console.log(" <> arg <> ")"
+      return [text|console.log($arg)|]
 
     translate i (Seq l r) = do
       left <- translate i l
       right <- translate i r
-      return $ left <> "\n" <> right
+      return $ left <> pack "\n" <> right
     translate _ End = return ""
 
-    translateBinOp :: IORef Int -> Expression a -> Expression a -> String -> IO String
+    translateBinOp :: IORef Int -> Expression a -> Expression a -> String -> IO Text
     translateBinOp i l r op = do
       left  <- translate i l
       right <- translate i r
-      return $ left <> op <> right
+      return $ left <> pack op <> right
 
-    translateReturn :: IORef Int -> Expression a -> IO String
+    translateReturn :: IORef Int -> Expression a -> IO Text
     translateReturn i (Seq l r) = do
       left  <- translate i l
       right <- translateReturn i r
-      return $ left <> "\n" <> right
-    translateReturn i other     = (++) "return " <$> translate i other
+      return $ left <> pack "\n" <> right
+    translateReturn i other     = (<>) (pack "return ") <$> translate i other

@@ -1,6 +1,26 @@
 module HSexamples where
 
-import Task3
+import qualified Data.Text.IO as T
+import           Task3
+import           Task4
+import           Prelude hiding (gcd)
+
+-- | Run for translating and interpreting these examples
+runMe :: IO ()
+runMe = do
+  translateAndRun "GCD" gcd
+  translateAndRun "String dancing" example 
+  translateAndRun "Some functions" funcFunc
+  
+  where
+    translateAndRun :: String -> Expression () -> IO ()
+    translateAndRun testName expr = do
+      putStrLn $ testName <> " to JS:"
+      translated <- translateToJs expr
+      T.putStrLn translated
+      putStrLn $ "Run " <> testName <> ":"
+      interpret expr
+      putStrLn ""
 
 gcd :: Expression ()
 gcd =

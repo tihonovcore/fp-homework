@@ -2,7 +2,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Task3 where
@@ -142,8 +141,6 @@ infixr 7 #
 infix 8 @=
 (@=) :: Expression t -> Expression t -> Expression ()
 (@=) = Apply
-
--- TODO: override + % etc
 
 -- | Default values for primitive types
 defaultValue :: Typeable t => IORef Int -> (Expression t -> k) -> IO (Expression t)

@@ -96,5 +96,9 @@
     <orderEntry type="library" name="microlens-0.4.10" level="project" />
     <orderEntry type="library" name="comonad-5.0.6" level="project" />
     <orderEntry type="library" name="distributive-0.6.1" level="project" />
+    <orderEntry type="library" name="neat-interpolation-0.3.2.6" level="project" />
+    <orderEntry type="library" name="megaparsec-7.0.5" level="project" />
+    <orderEntry type="library" name="case-insensitive-1.2.0.11" level="project" />
+    <orderEntry type="library" name="parser-combinators-1.1.0" level="project" />
   </component>
 </module>

@@ -37,7 +37,9 @@ library
                      , directory
                      , filepath
                      , comonad
+                     , text
                      , random
+                     , neat-interpolation
   default-language:    Haskell2010
 
 executable hw3
