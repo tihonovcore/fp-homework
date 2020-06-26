@@ -5,6 +5,7 @@ import Control.Comonad (Comonad(..))
 import System.Random (StdGen, newStdGen, random)
 import Control.Concurrent (threadDelay)
 
+-- | Representation of human health
 data Status = Healthy
             | PassiveInfected
             | ActiveInfected
@@ -16,6 +17,7 @@ instance Show Status where
   show ActiveInfected  = "#"
   show Recovered       = "@"
 
+-- | Representation of human
 data Person = Person
   { status :: Status
   , stdGen :: StdGen
@@ -25,9 +27,11 @@ data Person = Person
 instance Show Person where
   show p = show $ status p
 
+-- | Update status of selected person
 writeStatus :: Status -> Grid Person -> Grid Person
 writeStatus s g = flip gridWrite g $ (gridRead g) { status = s }
 
+-- | Creates started Grid with one infected person
 start :: IO (Grid Person)
 start = writeStatus PassiveInfected . Grid <$> (genericMove <$> healthy <*> healthy <*> healthyLZ)
   where
@@ -47,9 +51,12 @@ start = writeStatus PassiveInfected . Grid <$> (genericMove <$> healthy <*> heal
       g <- newStdGen
       return $ Person Healthy g 0
 
+-- | Functions, that move current position to position
+-- of one of neighbours
 neighbours :: [Grid Person -> Grid Person]
 neighbours = [left, right, up, down]
 
+-- | Count infected neighbours
 infectedNeighbours :: Grid Person -> Int
 infectedNeighbours g = notHealthyCount $ map (\d -> extract $ d g) neighbours
   where
@@ -58,12 +65,13 @@ infectedNeighbours g = notHealthyCount $ map (\d -> extract $ d g) neighbours
 
     notHealthy :: Person -> Bool
     notHealthy p = case status p of
-                     Healthy -> False
-                     _       -> True
+                     PassiveInfected -> True
+                     ActiveInfected  -> True
+                     _               -> False
 
 -- TODO: move as property
 infectionProbability :: Double
-infectionProbability = 0.3
+infectionProbability = 0.07
 
 incubationPeriod :: Int
 incubationPeriod = 7
@@ -75,13 +83,14 @@ immunityDuration :: Int
 immunityDuration = 7  
 
 -- TODO: add trips
+-- | Get current person, update his status and returns result
 rule :: Grid Person -> Person
 rule g = 
   let person = gridRead g in
   case status person of
-    Healthy         -> if infectedNeighbours g == 0 
-                       then person 
-                       else healthyRule
+    Healthy         -> if infectedNeighbours g == 0
+                       then person
+                       else healthyRule person
     PassiveInfected -> if daysInStatus person + 1 == incubationPeriod -- TODO: commonize
                        then person { status = ActiveInfected, daysInStatus = 0 }
                        else person { daysInStatus = daysInStatus person + 1 }
@@ -92,18 +101,27 @@ rule g =
                        then person { status = Healthy, daysInStatus = 0 }
                        else person { daysInStatus = daysInStatus person + 1 }
   where
-    healthyRule :: Person
-    healthyRule =
-      let (rv, gen) = (random :: StdGen -> (Double, StdGen)) $ stdGen (extract g) in
-        if rv < 1 - (1 - infectionProbability) * fromIntegral (infectedNeighbours g)
-        then Person PassiveInfected gen 0
-        else (extract g) { stdGen = gen }
+    healthyRule :: Person -> Person
+    healthyRule person =
+      let contactsWithInfected = infectedNeighbours g in
+      let (newPerson, outcomes) = getNRandomProbabilisticOutcome person contactsWithInfected in
+        if any (infectionProbability >) outcomes
+        then newPerson { status = PassiveInfected, daysInStatus = 0 }
+        else newPerson
+    
+    getNRandomProbabilisticOutcome :: Person -> Int -> (Person, [Double])
+    getNRandomProbabilisticOutcome currPerson n | n <= 0    = (currPerson, [])
+                                                | otherwise = 
+      let (rv, gen) = (random :: StdGen -> (Double, StdGen)) $ stdGen currPerson in
+      let (newPerson, list) = getNRandomProbabilisticOutcome (currPerson { stdGen = gen }) (n - 1) in
+        (newPerson, rv : list)
 
+-- | Make one step of infection
 step :: Grid Person -> Grid Person
 step = extend rule
 
 render :: Show a => Grid a -> String
-render = gridShowN 10 . gridShow
+render = gridShowN 15 . gridShow
 
 runN :: Int -> IO ()
 runN n = do
@@ -114,5 +132,5 @@ runN n = do
     runImpl k s | k == n    = return ()
                 | otherwise = do
       putStrLn $ render s
-      threadDelay 1000000
+      threadDelay 200000
       runImpl (k + 1) (step s)
